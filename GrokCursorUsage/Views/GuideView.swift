@@ -26,7 +26,7 @@ struct GuideView: View {
                         Text("The menu bar shows the pool you used most recently, and its percent. It switches when another pool’s usage moves. Open it for every pool on this Mac. A pool your account does not have is left off. When Cursor or Grok reports your plan name, that becomes the title.")
                         bullet("Cursor", "Auto and API models are separate rows, titled with your plan, such as Cursor Pro, when Cursor reports it. Sign in to Cursor on this Mac.")
                         bullet("Grok", "The grok.com pool, titled with your plan, such as SuperGrok, when Grok reports it. Sign in with the grok CLI, or opt in to Grok.app in Settings.")
-                        bullet("Grok Bot", "Shown only when Cursor reports a Grok Bot allowance.")
+                        bullet("Grok Bot", "Shown when Cursor reports a Grok Bot allowance. If Cursor is signed out, the row tells you to open Cursor and sign in. It is left off only when Cursor is signed in and your account has no Grok Bot allowance.")
                     }
                     section("Before the bars fill in") {
                         Text("This app has no account of its own. It reads sessions that are already on this Mac, then asks Cursor and Grok for usage.")
@@ -37,7 +37,7 @@ struct GuideView: View {
                     section("While it is running") {
                         bullet("Refresh", "Usage reloads when you open the app, every minute, and when you click Refresh. The menu bar name follows whichever pool rose.")
                         bullet("Pace", "“Over”, “under”, and “on pace” compare percent used with how much of the billing period has elapsed.")
-                        bullet("Spike Alerts", "Notifies you when a pool climbs from its first reading today. Once sends a single notification at the amount you set. Every sends another each time the pool climbs by that amount again. The amount moves in steps of 5%, from 5% to 50%, and starts at 15%. “Day” follows this Mac’s time zone. Turn Spike Alerts off in Settings to skip it.")
+                        bullet("Spike Alerts", "Notifies you when a pool climbs from its first reading today. If the pool resets during the day, the count starts over from the reading after that reset. Once sends a single notification at the amount you set. Every sends another each time the pool climbs by that amount again. The amount moves in steps of 5%, from 5% to 50%, and starts at 15%. “Day” follows this Mac’s time zone. Turn Spike Alerts off in Settings to skip it.")
                         bullet("Text Size and Appearance", "Settings has a text size slider and a System, Light, or Dark choice. System follows this Mac.")
                         bullet("Open at Login", "In Settings. Turn this on after you copy the app into /Applications. In Xcode, use Product → Show Build Folder in Finder and copy Build/Products/Debug/Grok & Cursor Usage.app. Login items need that copy, not a build still sitting in DerivedData.")
                     }
@@ -49,7 +49,7 @@ struct GuideView: View {
                         bullet("Refresh", "The phone updates when iCloud delivers a new snapshot. Refresh asks iCloud again. The iPhone target requires iOS 26.")
                     }
                     section("If a bar stays blank") {
-                        Text("The row says what to do next, such as opening Cursor or running grok login. A Cursor or Grok change can also blank a bar until this app is updated. Quit is in the menu header. There is no Dock icon.")
+                        Text("The row says what to do next, such as opening Cursor, running grok login, or running grok update. A Cursor or Grok change can also blank a bar until this app is updated. Quit is in the menu header. There is no Dock icon.")
                     }
                     section("Privacy") {
                         Text("The app reads the Cursor and grok CLI sign-ins already on this Mac, plus Grok.app’s if you opt in. It never changes them, and uses them only to ask Cursor and xAI for your usage. If iCloud is enabled, the latest usage numbers, never your sign-ins, go to your own iCloud for the iPhone app. The project runs no server and includes no analytics or tracking.")

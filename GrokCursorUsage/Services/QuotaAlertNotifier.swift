@@ -105,7 +105,7 @@ final class QuotaAlertNotifier {
         let content = UNMutableNotificationContent()
         content.title = "\(bar.title) usage spike"
         let day = LocalDay.dayLabel(for: dayKey)
-        content.body = "\(day): \(bar.title) climbed \(climbedPercent)% since the first reading today (\(bar.usedText))."
+        content.body = "\(day): \(bar.title) climbed \(climbedPercent)% since today's baseline (\(bar.usedText))."
         content.sound = .default
         let request = UNNotificationRequest(
             identifier: "quota-burn-\(bar.kind.rawValue)-\(dayKey)-\(climbedPercent)",
@@ -117,11 +117,12 @@ final class QuotaAlertNotifier {
 
     var spikeHint: String {
         let amount = stepPercent
+        let reset = " If a pool resets during the day, the count starts over."
         switch repeatMode {
         case .once:
-            return "One notification per pool when it climbs \(amount)% from the first reading today."
+            return "One notification per pool when it climbs \(amount)% from the first reading today." + reset
         case .every:
-            return "Another notification each further \(amount)% that pool uses today."
+            return "Another notification each further \(amount)% that pool uses today." + reset
         }
     }
 }

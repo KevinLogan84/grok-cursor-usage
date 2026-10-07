@@ -72,6 +72,10 @@ struct QuotaBar: Equatable, Identifiable {
     var pace: QuotaPace?
     var subtitle: String
     var detail: String
+    /// Provider-reported period bounds. Spike Alerts treats a change in either
+    /// date as a mid-day reset. Nil when the payload omitted that date.
+    var periodStart: Date?
+    var periodEnd: Date?
     var state: QuotaBarState
 
     var id: QuotaKind { kind }
@@ -103,6 +107,8 @@ struct QuotaBar: Equatable, Identifiable {
             pace: nil,
             subtitle: "",
             detail: message,
+            periodStart: nil,
+            periodEnd: nil,
             state: .unavailable(message)
         )
     }
@@ -531,6 +537,8 @@ enum QuotaParsing {
             pace: pace(usedPercent: used, start: periodStart, end: reset, now: now),
             subtitle: subtitle,
             detail: detail,
+            periodStart: start,
+            periodEnd: reset,
             state: .ready
         )
     }
@@ -785,6 +793,9 @@ enum QuotaUnavailableCopy {
     static let grokUnavailable = "Grok usage is unavailable"
     static let grokNeedsSignIn = "Sign in with the grok CLI or Grok.app"
     static let grokCLISignInAgain = "Run grok login in Terminal, or turn on Grok.app in Settings"
+    static let grokCLIOutdated = "Update the grok CLI (run grok update), then Refresh"
+    static let grokBotNeedsCursorSignIn = "Open Cursor and sign in, then Refresh"
+    static let grokBotUnavailable = "Grok Bot usage is unavailable"
 
     static func superGrok(hasGrokBilling: Bool, hasGrokSession: Bool) -> String {
         if !hasGrokBilling && !hasGrokSession {
@@ -827,8 +838,30 @@ enum QuotaBurnEvaluator {
         return min(maximumPercent, max(minimumPercent, snapped))
     }
 
+    /// A drop of at least this much (on the 0…1 scale, so 0.05 is 5 percentage
+    /// points) below today's baseline means the pool reset. Smaller dips are noise.
+    static let resetDropFraction = 0.05
+
+    /// True when the provider's period start or reset date moved. A date that
+    /// was missing on one side is not a change — learning it later is not a reset.
+    static func periodDidReset(
+        storedStart: Date?,
+        storedEnd: Date?,
+        start: Date?,
+        end: Date?
+    ) -> Bool {
+        func changed(_ old: Date?, _ new: Date?) -> Bool {
+            guard let old, let new else { return false }
+            return abs(old.timeIntervalSince(new)) > 1
+        }
+        return changed(storedStart, start) || changed(storedEnd, end)
+    }
+
     /// First sample of a local calendar day becomes the baseline. `usedFraction` is the raw
     /// provider value (1.2 = 120%), not the capped bar fill, so overage still counts.
+    /// If the pool resets later that day — usage drops by at least `resetDropFraction`,
+    /// or the period start or reset date changes — the post-reset reading becomes the
+    /// baseline and the step count goes back to zero.
     /// Once notifies a single time when the climb reaches one step. Every notifies again
     /// at each further step.
     static func evaluate(
@@ -838,10 +871,23 @@ enum QuotaBurnEvaluator {
         storedStartUsed: Double?,
         notifiedSteps: Int,
         mode: SpikeAlertRepeat = .once,
-        stepPercent: Int = defaultPercent
+        stepPercent: Int = defaultPercent,
+        periodStart: Date? = nil,
+        periodEnd: Date? = nil,
+        storedPeriodStart: Date? = nil,
+        storedPeriodEnd: Date? = nil
     ) -> Decision {
         let used = max(0, usedFraction)
         guard storedDayKey == dayKey, let start = storedStartUsed else {
+            return Decision(shouldNotify: false, startUsed: used, notifiedSteps: 0)
+        }
+        let dropped = start - used >= resetDropFraction - 0.000_001
+        if dropped || periodDidReset(
+            storedStart: storedPeriodStart,
+            storedEnd: storedPeriodEnd,
+            start: periodStart,
+            end: periodEnd
+        ) {
             return Decision(shouldNotify: false, startUsed: used, notifiedSteps: 0)
         }
         let step = Double(clampPercent(stepPercent)) / 100
