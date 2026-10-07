@@ -45,11 +45,25 @@ enum AppearancePreference: String, CaseIterable, Identifiable, Sendable {
 @Observable
 final class AppearancePreferenceStore {
     static let storageKey = "com.grokcursorusage.appearancePreference"
+    static let scaleKey = "com.grokcursorusage.interfaceScale"
 
     var preference: AppearancePreference {
         didSet {
             guard preference != oldValue else { return }
             defaults.set(preference.rawValue, forKey: Self.storageKey)
+        }
+    }
+
+    /// 1.25 is a quarter larger than the original menu. The slider moves around that.
+    var interfaceScale: Double {
+        didSet {
+            let clamped = MenuMetrics.clamp(interfaceScale)
+            if clamped != interfaceScale {
+                interfaceScale = clamped
+                return
+            }
+            guard interfaceScale != oldValue else { return }
+            defaults.set(interfaceScale, forKey: Self.scaleKey)
         }
     }
 
@@ -60,6 +74,52 @@ final class AppearancePreferenceStore {
         preference = AppearancePreference.resolved(
             stored: defaults.string(forKey: Self.storageKey)
         )
+        let stored = defaults.object(forKey: Self.scaleKey) as? Double
+        interfaceScale = MenuMetrics.clamp(stored ?? MenuMetrics.defaultScale)
+    }
+}
+
+/// Sizes for the Mac menu. `defaultScale` is a quarter larger than the original layout.
+enum MenuMetrics {
+    static let defaultScale = 1.25
+    static let minimumScale = 1.0
+    static let maximumScale = 1.6
+    static let baseWidth: CGFloat = 360
+
+    static func clamp(_ scale: Double) -> Double {
+        min(max(scale, minimumScale), maximumScale)
+    }
+
+    static func width(for scale: Double) -> CGFloat {
+        baseWidth * clamp(scale)
+    }
+
+    static func points(_ original: CGFloat, scale: Double) -> CGFloat {
+        original * clamp(scale)
+    }
+
+    static func font(
+        _ original: CGFloat,
+        scale: Double,
+        weight: Font.Weight = .regular,
+        monospaced: Bool = false
+    ) -> Font {
+        let size = points(original, scale: scale)
+        if monospaced {
+            return .system(size: size, weight: weight, design: .monospaced)
+        }
+        return .system(size: size, weight: weight)
+    }
+}
+
+private struct MenuScaleKey: EnvironmentKey {
+    static let defaultValue = MenuMetrics.defaultScale
+}
+
+extension EnvironmentValues {
+    var menuScale: Double {
+        get { self[MenuScaleKey.self] }
+        set { self[MenuScaleKey.self] = newValue }
     }
 }
 

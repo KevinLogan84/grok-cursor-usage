@@ -4,24 +4,26 @@ struct GuideView: View {
     var appearance: AppearancePreferenceStore
     var onClose: () -> Void
 
+    private var scale: Double { appearance.interfaceScale }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("How to Use")
-                    .font(.title2.weight(.semibold))
+                    .font(MenuMetrics.font(22, scale: scale, weight: .semibold))
                 Spacer()
                 Button("Done", action: onClose)
                     .keyboardShortcut(.cancelAction)
                     .glassPlainButton(compact: true)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 18)
-            .padding(.bottom, 8)
+            .padding(.horizontal, MenuMetrics.points(20, scale: scale))
+            .padding(.top, MenuMetrics.points(18, scale: scale))
+            .padding(.bottom, MenuMetrics.points(8, scale: scale))
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: MenuMetrics.points(18, scale: scale)) {
                     section("What you see") {
-                        Text("The menu bar shows the pool that is furthest along, and its percent used. Open it for every pool on this Mac. A plan you do not have is left off, and each title is the plan name Cursor or Grok reported.")
+                        Text("The menu bar shows the pool you used most recently, and its percent. It switches when another pool’s usage moves. Open it for every pool on this Mac. A plan you do not have is left off, and each title is the plan name Cursor or Grok reported.")
                         bullet("Cursor", "Auto and API models are separate rows. The title is the plan, such as Cursor Pro or Cursor Ultra. Sign in to Cursor on this Mac.")
                         bullet("Grok", "The grok.com pool, titled SuperGrok, SuperGrok Heavy, or whatever plan is on the account. Sign in with the grok CLI or Grok.app.")
                         bullet("Grok Bot", "Shown only when Cursor reports a Grok Bot allowance.")
@@ -33,7 +35,7 @@ struct GuideView: View {
                         bullet("SuperGrok via Grok.app", "Sign in to grok.com in Grok.app. If the bar still asks you to sign in, turn on Full Disk Access for Grok & Cursor Usage so it can read Grok.app’s cookie file.")
                     }
                     section("While it is running") {
-                        bullet("Refresh", "Usage reloads when you open the app, every 5 minutes, and when you click Refresh.")
+                        bullet("Refresh", "Usage reloads when you open the app, every minute, and when you click Refresh. The menu bar name follows whichever pool rose.")
                         bullet("Pace", "“Over”, “under”, and “on pace” compare percent used with how much of the billing period has elapsed.")
                         bullet("Spike alerts", "Once a Chicago day, a bar that climbs 15 points from its first reading that day posts a notification. Turn Spike alerts off to skip that.")
                         bullet("Open at Login", "Turn this on after you copy the app into /Applications. In Xcode, use Product → Show Build Folder in Finder and copy Build/Products/Debug/Grok & Cursor Usage.app. Login items need that copy, not a build still sitting in DerivedData.")
@@ -49,33 +51,37 @@ struct GuideView: View {
                         Text("The line under the title is the next step: open Cursor, or sign in to grok.com in Grok.app. A Cursor or Grok change can also blank a bar until this app is updated. Quit is in the menu. There is no Dock icon.")
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
+                .padding(.horizontal, MenuMetrics.points(20, scale: scale))
+                .padding(.bottom, MenuMetrics.points(20, scale: scale))
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(minWidth: 440, minHeight: 520)
+        .frame(
+            minWidth: MenuMetrics.points(440, scale: scale),
+            minHeight: MenuMetrics.points(520, scale: scale)
+        )
+        .environment(\.menuScale, scale)
         .liquidGlassBackground(preference: appearance.preference)
     }
 
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: MenuMetrics.points(8, scale: scale)) {
             Text(title)
-                .font(.headline)
+                .font(MenuMetrics.font(17, scale: scale, weight: .semibold))
             content()
-                .font(.callout)
+                .font(MenuMetrics.font(15, scale: scale))
                 .foregroundStyle(LiquidGlass.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     private func bullet(_ title: String, _ body: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: MenuMetrics.points(2, scale: scale)) {
             Text(title)
-                .font(.callout.weight(.semibold))
+                .font(MenuMetrics.font(15, scale: scale, weight: .semibold))
                 .foregroundStyle(LiquidGlass.textPrimary)
             Text(body)
-                .font(.callout)
+                .font(MenuMetrics.font(15, scale: scale))
                 .foregroundStyle(LiquidGlass.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }

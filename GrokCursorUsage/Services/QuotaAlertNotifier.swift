@@ -4,6 +4,7 @@ import Foundation
 
 /// Posts the once-a-day spike alert when a subscription bar climbs 15 points.
 @MainActor
+@Observable
 final class QuotaAlertNotifier {
     static let enabledKey = "com.grokcursorusage.alerts.enabled"
 

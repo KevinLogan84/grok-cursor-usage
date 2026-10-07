@@ -8,13 +8,15 @@ enum QuotaMenuBarSummary {
         var fraction: Double?
     }
 
-    static func display(for bars: [QuotaBar]) -> Display {
+    static func display(for bars: [QuotaBar], activeKind: QuotaKind?) -> Display {
         let ready = bars.filter(\.isReady)
-        guard let hottest = ready.max(by: { $0.usedPercent < $1.usedPercent }) else {
+        let chosen = ready.first { $0.kind == activeKind }
+            ?? ready.max(by: { $0.usedPercent < $1.usedPercent })
+        guard let chosen else {
             return Display(label: "USE", value: "—", fraction: nil)
         }
-        let percent = Int(hottest.usedPercent.rounded())
-        return Display(label: shortLabel(hottest.kind), value: "\(percent)%", fraction: hottest.usedFraction)
+        let percent = Int(chosen.usedPercent.rounded())
+        return Display(label: shortLabel(chosen.kind), value: "\(percent)%", fraction: chosen.usedFraction)
     }
 
     static func tooltip(for bars: [QuotaBar]) -> String {
@@ -87,14 +89,17 @@ final class StatusBarController {
     private func observeModel() {
         withObservationTracking {
             _ = model.quotas.bars
+            _ = model.quotas.menuBarKind
             _ = model.quotas.isRefreshing
             _ = model.quotas.lastUpdated
             _ = model.appearance.preference
+            _ = model.appearance.interfaceScale
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
                 self.refreshStatusItem()
                 self.applyWindowAppearances()
+                self.reflowMenu()
                 self.observeModel()
             }
         }
@@ -108,7 +113,7 @@ final class StatusBarController {
 
     private func refreshStatusItem() {
         guard let button = statusItem.button else { return }
-        let summary = QuotaMenuBarSummary.display(for: model.quotas.bars)
+        let summary = QuotaMenuBarSummary.display(for: model.quotas.bars, activeKind: model.quotas.menuBarKind)
         button.toolTip = QuotaMenuBarSummary.tooltip(for: model.quotas.bars)
         button.setAccessibilityLabel("Grok and Cursor usage, \(summary.label) \(summary.value)")
         let appearance = button.effectiveAppearance
@@ -140,12 +145,16 @@ final class StatusBarController {
             onShowGuide: { [weak self] in
                 self?.closeMenu()
                 self?.showGuide()
+            },
+            onLayout: { [weak self] in
+                self?.reflowMenu()
             }
         )
         let hosting = NSHostingController(rootView: rootView)
         hosting.sizingOptions = [.intrinsicContentSize]
-        let fitted = hosting.sizeThatFits(in: NSSize(width: MenuLayout.width, height: 10_000))
-        let size = NSSize(width: MenuLayout.width, height: max(320, ceil(fitted.height)))
+        let width = MenuMetrics.width(for: model.appearance.interfaceScale)
+        let fitted = hosting.sizeThatFits(in: NSSize(width: width, height: 10_000))
+        let size = NSSize(width: width, height: ceil(fitted.height))
 
         let panel = KeyableMenuPanel(
             contentRect: NSRect(origin: .zero, size: size),
@@ -180,6 +189,21 @@ final class StatusBarController {
         content.layer?.cornerCurve = .continuous
         content.layer?.masksToBounds = true
         content.layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    private func reflowMenu() {
+        guard let panel = menuPanel, panel.isVisible,
+              let hosting = panel.contentViewController as? NSHostingController<UsageMenuView>,
+              let button = statusItem.button
+        else { return }
+        let width = MenuMetrics.width(for: model.appearance.interfaceScale)
+        let fitted = hosting.sizeThatFits(in: NSSize(width: width, height: 10_000))
+        let size = NSSize(width: width, height: max(1, ceil(fitted.height)))
+        guard abs(panel.frame.width - size.width) > 0.5 || abs(panel.frame.height - size.height) > 0.5 else { return }
+        panel.setContentSize(size)
+        positionMenu(panel, relativeTo: button)
+        Self.applyMenuShellMask(to: panel)
+        panel.invalidateShadow()
     }
 
     private func positionMenu(_ panel: NSPanel, relativeTo button: NSStatusBarButton) {
@@ -259,8 +283,14 @@ final class StatusBarController {
                 self?.guideWindow?.close()
             }
         )
+        let scale = model.appearance.interfaceScale
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 560),
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: MenuMetrics.points(480, scale: scale),
+                height: MenuMetrics.points(560, scale: scale)
+            ),
             styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false

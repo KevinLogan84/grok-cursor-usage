@@ -2,7 +2,7 @@
 
 Menu bar app for the Cursor and Grok usage pools on your Mac. It shows only the pools that account has, and each title is the plan name those services report. The app has no account of its own. It reads the Cursor and Grok sign-in already on that Mac.
 
-The menu bar shows whichever pool is furthest along, plus its percent used. Open it for every bar, the pace line, and the reset line.
+The menu bar shows the pool you used most recently, plus its percent. It switches when another pool’s usage moves. Open it for every bar, the pace line, and the reset line.
 
 There is no downloadable build. Clone this repo and run it from Xcode:
 
@@ -54,7 +54,7 @@ If Grok stays blank after Grok.app is signed in, open **System Settings → Priv
 
 ## While it is running
 
-- It reloads at launch, every 5 minutes, and when you click **Refresh**.
+- It reloads at launch, every minute, and when you click **Refresh**. The menu bar stays on the pool whose percent rose most recently, and switches when a different pool moves.
 - Pace compares percent used with how much of that pool’s period has elapsed. The line reads over, under, or on pace.
 - **Spike alerts** posts once per Chicago day when a bar climbs 15 points from the first reading that day. Turn the toggle off to skip it. If macOS never shows the permission sheet, use **Open Notification Settings**.
 - **Guide** in the menu matches this section, plus the sign-in steps above.

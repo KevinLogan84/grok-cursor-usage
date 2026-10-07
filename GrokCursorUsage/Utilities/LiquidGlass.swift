@@ -208,13 +208,23 @@ struct GlassProminentButtonStyle: ButtonStyle {
     var compact = false
 
     func makeBody(configuration: Configuration) -> some View {
+        GlassProminentButtonBody(configuration: configuration, compact: compact)
+    }
+}
+
+private struct GlassProminentButtonBody: View {
+    @Environment(\.menuScale) private var menuScale
+    let configuration: ButtonStyleConfiguration
+    let compact: Bool
+
+    var body: some View {
         configuration.label
-            .font(compact ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
+            .font(MenuMetrics.font(compact ? 13 : 14, scale: menuScale, weight: .semibold))
             .foregroundStyle(Color.white)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .padding(.horizontal, compact ? 8 : 14)
-            .padding(.vertical, compact ? 6 : 7)
+            .padding(.horizontal, MenuMetrics.points(compact ? 10 : 14, scale: menuScale))
+            .padding(.vertical, MenuMetrics.points(compact ? 7 : 8, scale: menuScale))
             .background {
                 Capsule()
                     .fill(LiquidGlass.accent.opacity(configuration.isPressed ? 0.82 : 1))
@@ -246,17 +256,18 @@ struct GlassPlainButtonStyle: ButtonStyle {
 private struct GlassPlainButtonBody: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.menuScale) private var menuScale
     let configuration: ButtonStyleConfiguration
     let compact: Bool
 
     var body: some View {
         let label = configuration.label
-            .font(compact ? .caption.weight(.medium) : .subheadline.weight(.medium))
+            .font(MenuMetrics.font(compact ? 13 : 14, scale: menuScale, weight: .medium))
             .foregroundStyle(LiquidGlass.textPrimary)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .padding(.horizontal, compact ? 8 : 14)
-            .padding(.vertical, compact ? 6 : 7)
+            .padding(.horizontal, MenuMetrics.points(compact ? 10 : 14, scale: menuScale))
+            .padding(.vertical, MenuMetrics.points(compact ? 7 : 8, scale: menuScale))
 
         Group {
             if reduceTransparency {

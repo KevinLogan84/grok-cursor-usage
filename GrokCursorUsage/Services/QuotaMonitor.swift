@@ -57,12 +57,18 @@ final class QuotaMonitor {
     private(set) var bars: [QuotaBar]
     private(set) var lastUpdated: Date?
     private(set) var isRefreshing = false
+    /// Pool the menu bar names: the one whose percent rose most recently.
+    private(set) var menuBarKind: QuotaKind?
+
+    /// How often a running app looks again, so the menu bar can follow the pool in use.
+    static let refreshInterval: TimeInterval = 60
 
     private let defaults: UserDefaults
     private let notifier: QuotaAlertNotifier
     private let sources: QuotaRefreshSources
     private let fetchTimeout: Duration
     private var timer: Timer?
+    private var menuBarFocus: QuotaMenuBarFocus
 
     init(
         defaults: UserDefaults = .standard,
@@ -75,12 +81,15 @@ final class QuotaMonitor {
         self.sources = sources
         self.fetchTimeout = fetchTimeout
         bars = []
+        let stored = Self.loadFocus(from: defaults)
+        menuBarFocus = stored
+        menuBarKind = stored.kind
     }
 
     func start() {
         guard timer == nil else { return }
         Task { await refresh() }
-        timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 await self?.refresh()
             }
@@ -222,7 +231,45 @@ final class QuotaMonitor {
 
         bars = QuotaKind.subscriptionCases.compactMap { included[$0] }
         lastUpdated = .now
+        if havePeriod, haveSand, haveGrok {
+            let next = menuBarFocus.advanced(by: bars)
+            menuBarFocus = next
+            menuBarKind = next.kind
+            saveFocus(next)
+        }
         evaluateBurns()
+    }
+
+    private static let menuBarKindKey = "com.grokcursorusage.menuBar.kind"
+
+    private static func menuBarPercentKey(_ kind: QuotaKind) -> String {
+        "com.grokcursorusage.menuBar.percent.\(kind.rawValue)"
+    }
+
+    private static func loadFocus(from defaults: UserDefaults) -> QuotaMenuBarFocus {
+        var percents: [QuotaKind: Double] = [:]
+        for kind in QuotaKind.allCases {
+            guard defaults.object(forKey: menuBarPercentKey(kind)) != nil else { continue }
+            percents[kind] = defaults.double(forKey: menuBarPercentKey(kind))
+        }
+        let kind = defaults.string(forKey: menuBarKindKey).flatMap(QuotaKind.init(rawValue:))
+        return QuotaMenuBarFocus(kind: kind, percents: percents)
+    }
+
+    private func saveFocus(_ focus: QuotaMenuBarFocus) {
+        if let kind = focus.kind {
+            defaults.set(kind.rawValue, forKey: Self.menuBarKindKey)
+        } else {
+            defaults.removeObject(forKey: Self.menuBarKindKey)
+        }
+        for kind in QuotaKind.allCases {
+            let key = Self.menuBarPercentKey(kind)
+            if let percent = focus.percents[kind] {
+                defaults.set(percent, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
     }
 
     private func evaluateBurns() {
