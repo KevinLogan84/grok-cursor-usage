@@ -57,8 +57,12 @@ struct PhoneScreen: View {
         GlassEffectContainer(spacing: IOSGlass.stackSpacing) {
             VStack(alignment: .leading, spacing: IOSGlass.stackSpacing) {
                 header
-                if let snapshot = reader.snapshot, !snapshot.bars.isEmpty {
-                    subscriptionCard(snapshot.bars)
+                if let snapshot = reader.snapshot {
+                    if snapshot.bars.isEmpty {
+                        emptyPools
+                    } else {
+                        subscriptionCard(snapshot.bars)
+                    }
                 } else {
                     emptyState
                 }
@@ -182,6 +186,17 @@ struct PhoneScreen: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var emptyPools: some View {
+        ViewerGlassCard {
+            Text("No usage pools on this Mac")
+                .font(.body)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("No usage pools on this Mac")
     }
 
     private func subscriptionCard(_ bars: [SnapshotQuotaBar]) -> some View {

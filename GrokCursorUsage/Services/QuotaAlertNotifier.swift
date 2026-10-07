@@ -78,9 +78,9 @@ final class QuotaAlertNotifier {
     func postQuotaBurn(bar: QuotaBar, dayKey: String) {
         guard alertsEnabled else { return }
         let content = UNMutableNotificationContent()
-        content.title = "\(bar.kind.title) usage spike"
+        content.title = "\(bar.title) usage spike"
         content.body =
-            "\(ChicagoDay.dayLabel(for: dayKey)): \(bar.kind.title) used more than \(QuotaBurnEvaluator.dailyPercentText) of its allowance today (\(bar.usedText))."
+            "\(ChicagoDay.dayLabel(for: dayKey)): \(bar.title) used more than \(QuotaBurnEvaluator.dailyPercentText) of its allowance today (\(bar.usedText))."
         content.sound = .default
         let request = UNNotificationRequest(
             identifier: "quota-burn-\(bar.kind.rawValue)-\(dayKey)",

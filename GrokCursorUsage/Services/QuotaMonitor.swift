@@ -74,7 +74,7 @@ final class QuotaMonitor {
         self.notifier = notifier
         self.sources = sources
         self.fetchTimeout = fetchTimeout
-        bars = QuotaKind.subscriptionCases.map { .loading($0) }
+        bars = []
     }
 
     func start() {
@@ -174,6 +174,8 @@ final class QuotaMonitor {
         }
     }
 
+    private var included: [QuotaKind: QuotaBar] = [:]
+
     private func applyFetched(
         period: Data?,
         havePeriod: Bool,
@@ -183,63 +185,44 @@ final class QuotaMonitor {
         haveGrok: Bool,
         grokSession: Bool
     ) {
-        var nextBars = bars
-
         if havePeriod {
-            let models = period.flatMap { QuotaParsing.cursorModelBars(from: $0) }
-            replace(
-                models?.cursorModels
-                    ?? lastReady(.cursorModels)
-                    ?? .unavailable(.cursorModels, message: "Open Cursor once so this Mac can read usage"),
-                in: &nextBars,
-                order: QuotaKind.subscriptionCases
-            )
-            replace(
-                models?.otherModels
-                    ?? lastReady(.otherModels)
-                    ?? .unavailable(.otherModels, message: "Open Cursor once so this Mac can read usage"),
-                in: &nextBars,
-                order: QuotaKind.subscriptionCases
-            )
+            included[.cursorModels] = nil
+            included[.otherModels] = nil
+            let models = period.flatMap { QuotaParsing.cursorBars(from: $0) } ?? []
+            if models.isEmpty {
+                included[.cursorModels] = .unavailable(
+                    .cursorModels,
+                    message: period == nil
+                        ? "Open Cursor once so this Mac can read usage"
+                        : "Cursor usage didn't include a pool",
+                    title: "Cursor"
+                )
+            } else {
+                for bar in models {
+                    included[bar.kind] = bar
+                }
+            }
         }
         if haveGrok {
-            replace(
-                grok.flatMap { QuotaParsing.superGrokBar(from: $0) }
-                    ?? lastReady(.superGrok)
-                    ?? .unavailable(
-                        .superGrok,
-                        message: QuotaUnavailableCopy.superGrok(
-                            hasGrokBilling: grok != nil,
-                            hasGrokSession: grokSession
-                        )
-                    ),
-                in: &nextBars,
-                order: QuotaKind.subscriptionCases
-            )
+            if let bar = grok.flatMap({ QuotaParsing.superGrokBar(from: $0) }) {
+                included[.superGrok] = bar
+            } else if grokSession {
+                included[.superGrok] = .unavailable(
+                    .superGrok,
+                    message: QuotaUnavailableCopy.grokUnavailable,
+                    title: "Grok"
+                )
+            } else {
+                included[.superGrok] = nil
+            }
         }
         if haveSand {
-            replace(
-                sand.flatMap { QuotaParsing.grokBotBar(from: $0) }
-                    ?? lastReady(.grokBot)
-                    ?? .unavailable(.grokBot, message: "Grok Bot weekly usage is unavailable"),
-                in: &nextBars,
-                order: QuotaKind.subscriptionCases
-            )
+            included[.grokBot] = sand.flatMap { QuotaParsing.grokBotBar(from: $0) }
         }
 
-        bars = nextBars
+        bars = QuotaKind.subscriptionCases.compactMap { included[$0] }
         lastUpdated = .now
         evaluateBurns()
-    }
-
-    private func replace(_ bar: QuotaBar, in list: inout [QuotaBar], order: [QuotaKind]) {
-        list = order.map { kind in
-            kind == bar.kind ? bar : (list.first { $0.kind == kind } ?? .loading(kind))
-        }
-    }
-
-    private func lastReady(_ kind: QuotaKind) -> QuotaBar? {
-        bars.first { $0.kind == kind && $0.state == .ready }
     }
 
     private func evaluateBurns() {

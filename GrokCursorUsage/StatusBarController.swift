@@ -21,10 +21,10 @@ enum QuotaMenuBarSummary {
         bars.map { bar in
             if bar.isReady {
                 let pace = bar.pace.map { " · \($0.text)" } ?? ""
-                return "\(bar.kind.title) \(bar.usedText)\(pace)"
+                return "\(bar.title) \(bar.usedText)\(pace)"
             }
             let detail = bar.detail.isEmpty ? "unavailable" : bar.detail
-            return "\(bar.kind.title): \(detail)"
+            return "\(bar.title): \(detail)"
         }.joined(separator: "\n")
     }
 

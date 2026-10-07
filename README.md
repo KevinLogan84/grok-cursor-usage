@@ -1,6 +1,6 @@
 # Grok & Cursor Usage
 
-Menu bar app for the four subscription pools from Usage Meter: Cursor Models, Other Models, SuperGrok Heavy, and Grok Bot. Usage Meter is unchanged. This app does not meter hotspot data, and it does not have an account of its own.
+Menu bar app for the Cursor and Grok usage pools on this Mac. It shows only the pools the account has, and each title is the plan name those services report. Usage Meter is unchanged. This app does not meter hotspot data, and it does not have an account of its own.
 
 The menu bar shows whichever pool is furthest along, plus its percent used. Open it for every bar, pace, and the reset line.
 
@@ -15,16 +15,15 @@ To keep it running after you close Xcode, copy `Grok & Cursor Usage.app` into `/
 
 ## What has to be signed in
 
-| Bar | What it reads |
+| Pool | When it appears |
 | --- | --- |
-| Cursor Models | Cursor on this Mac, already signed in. Includes Cursor Grok. |
-| Other Models | The same Cursor sign-in. Monthly named-model pool. |
-| Grok Bot | The same Cursor sign-in. Weekly Grok Bot allowance. |
-| SuperGrok Heavy | The grok CLI (`~/.grok/auth.json`, or `GROK_HOME` / `GROK_AUTH_JSON`), or Grok.app signed in to grok.com. |
+| Cursor Auto and Cursor API | After Cursor is signed in on this Mac. The title becomes the plan, such as Cursor Pro or Cursor Ultra. A pool Cursor does not report is left off. |
+| Grok | After the grok CLI (`~/.grok/auth.json`, or `GROK_HOME` / `GROK_AUTH_JSON`) or Grok.app is signed in. The title is the plan name, such as SuperGrok or SuperGrok Heavy. |
+| Grok Bot | Only when Cursor reports a Grok Bot allowance. |
 
-Cursor’s token is read from `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`. Open Cursor once if that bar says to.
+Cursor’s token is read from `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`. Open Cursor once if that row says to.
 
-If SuperGrok still says to sign in after Grok.app is signed in, open System Settings → Privacy & Security → Full Disk Access and enable **Grok & Cursor Usage**. Grok.app keeps its grok.com session in a cookie file other apps cannot read until that is on.
+If Grok stays blank after Grok.app is signed in, open System Settings → Privacy & Security → Full Disk Access and enable **Grok & Cursor Usage**. Grok.app keeps its grok.com session in a cookie file other apps cannot read until that is on.
 
 ## While it is running
 

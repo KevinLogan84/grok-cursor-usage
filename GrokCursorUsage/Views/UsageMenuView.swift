@@ -59,8 +59,15 @@ struct UsageMenuView: View {
                 Text("Subscription Usage")
                     .font(.headline)
                     .foregroundStyle(LiquidGlass.textPrimary)
-                ForEach(quotas.bars) { bar in
-                    quotaRow(bar)
+                if quotas.bars.isEmpty {
+                    Text(quotas.isRefreshing ? "Checking which plans are on this Mac…" : "No usage pools found")
+                        .font(.caption)
+                        .foregroundStyle(LiquidGlass.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    ForEach(quotas.bars) { bar in
+                        quotaRow(bar)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -71,7 +78,7 @@ struct UsageMenuView: View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .bottom, spacing: 6) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(bar.kind.title)
+                    Text(bar.title)
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(LiquidGlass.textPrimary)
                     if !bar.subtitle.isEmpty {
@@ -165,12 +172,12 @@ struct UsageMenuView: View {
 
     private func quotaAccessibility(_ bar: QuotaBar) -> String {
         if bar.state != .ready {
-            return "\(bar.kind.title), \(bar.detail)"
+            return "\(bar.title), \(bar.detail)"
         }
         if let pace = bar.pace {
-            return "\(bar.kind.title) \(bar.usedText), \(pace.text)"
+            return "\(bar.title) \(bar.usedText), \(pace.text)"
         }
-        return "\(bar.kind.title) \(bar.usedText)"
+        return "\(bar.title) \(bar.usedText)"
     }
 }
 

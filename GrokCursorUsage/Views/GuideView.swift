@@ -21,11 +21,10 @@ struct GuideView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     section("What you see") {
-                        Text("The menu bar shows the subscription pool that is furthest along, and its percent used. Open it for all four bars.")
-                        bullet("Cursor Models", "Cursor’s Auto pool, which includes Cursor Grok. Sign in to Cursor on this Mac.")
-                        bullet("Other Models", "Cursor’s named-model pool for the same billing month.")
-                        bullet("Grok Bot", "The weekly Grok Bot allowance billed through Cursor.")
-                        bullet("SuperGrok Heavy", "The grok.com weekly pool. Sign in with the grok CLI, or in Grok.app.")
+                        Text("The menu bar shows the pool that is furthest along, and its percent used. Open it for every pool on this Mac. A plan you do not have is left off, and each title is the plan name Cursor or Grok reported.")
+                        bullet("Cursor", "Auto and API models are separate rows. The title is the plan, such as Cursor Pro or Cursor Ultra. Sign in to Cursor on this Mac.")
+                        bullet("Grok", "The grok.com pool, titled SuperGrok, SuperGrok Heavy, or whatever plan is on the account. Sign in with the grok CLI or Grok.app.")
+                        bullet("Grok Bot", "Shown only when Cursor reports a Grok Bot allowance.")
                     }
                     section("Before the bars fill in") {
                         Text("This app has no account of its own. It reads sessions that are already on this Mac, then asks Cursor and Grok for usage.")

@@ -20,11 +20,12 @@ enum QuotaKind: String, CaseIterable, Codable, Sendable, Identifiable {
         [.onDemand, .xaiCredits]
     }
 
+    /// Fallback label. A ready bar uses the plan name from the provider instead.
     var title: String {
         switch self {
-        case .cursorModels: return "Cursor Models"
-        case .otherModels: return "Other Models"
-        case .superGrok: return "SuperGrok Heavy"
+        case .cursorModels: return "Cursor Auto"
+        case .otherModels: return "Cursor API"
+        case .superGrok: return "Grok"
         case .grokBot: return "Grok Bot"
         case .onDemand: return "On Demand"
         case .xaiCredits: return "X Credits"
@@ -61,6 +62,8 @@ enum QuotaPace: Equatable, Codable, Sendable {
 
 struct QuotaBar: Equatable, Identifiable {
     var kind: QuotaKind
+    /// Plan name to show, such as "Cursor Ultra" or "SuperGrok". Not the pool's fallback title.
+    var title: String
     /// 0…1 fill of the drawn bar.
     var usedFraction: Double
     /// Raw percent from the provider; exceeds 100 while over quota.
@@ -90,9 +93,10 @@ struct QuotaBar: Equatable, Identifiable {
         unavailable(kind, message: loadingMessage)
     }
 
-    static func unavailable(_ kind: QuotaKind, message: String) -> QuotaBar {
+    static func unavailable(_ kind: QuotaKind, message: String, title: String? = nil) -> QuotaBar {
         QuotaBar(
             kind: kind,
+            title: title ?? kind.title,
             usedFraction: 0,
             usedPercent: 0,
             usedText: "—",
@@ -105,40 +109,49 @@ struct QuotaBar: Equatable, Identifiable {
 }
 
 enum QuotaParsing {
-    static func cursorModelBars(from data: Data, now: Date = .now) -> (cursorModels: QuotaBar, otherModels: QuotaBar)? {
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return nil
-        }
+    /// One bar per Cursor pool that this account actually reports. Auto and API
+    /// are separate. A missing percent means that pool is not on the plan.
+    static func cursorBars(from data: Data, now: Date = .now) -> [QuotaBar]? {
+        guard let root = jsonObject(from: data) else { return nil }
         let plan = root["planUsage"] as? [String: Any] ?? [:]
         let auto = firstNumber(plan, keys: ["autoPercentUsed"])
             ?? percentInMessage(root["autoModelSelectedDisplayMessage"] as? String)
         let api = firstNumber(plan, keys: ["apiPercentUsed"])
             ?? percentInMessage(root["namedModelSelectedDisplayMessage"] as? String)
-        guard let auto, let api else { return nil }
-
+        let planTitle = SubscriptionPlanName.cursor(from: root)
         let reset = parseResetValue(root["billingCycleEnd"])
         let start = parseResetValue(root["billingCycleStart"])
         let caption = resetCaption(reset: reset, now: now)
-        return (
-            percentBar(
-                kind: .cursorModels,
-                usedPercent: auto,
-                subtitle: "Includes Cursor Grok",
-                detail: caption,
-                start: start,
-                reset: reset,
-                now: now
-            ),
-            percentBar(
-                kind: .otherModels,
-                usedPercent: api,
-                subtitle: "Monthly usage",
-                detail: caption,
-                start: start,
-                reset: reset,
-                now: now
+        var bars: [QuotaBar] = []
+        if let auto {
+            bars.append(
+                percentBar(
+                    kind: .cursorModels,
+                    title: planTitle ?? "Cursor Auto",
+                    usedPercent: auto,
+                    subtitle: "Auto",
+                    detail: caption,
+                    start: start,
+                    reset: reset,
+                    now: now
+                )
             )
-        )
+        }
+        if let api {
+            bars.append(
+                percentBar(
+                    kind: .otherModels,
+                    title: planTitle ?? "Cursor API",
+                    usedPercent: api,
+                    subtitle: "API models",
+                    detail: caption,
+                    start: start,
+                    reset: reset,
+                    now: now
+                )
+            )
+        }
+        return bars
     }
 
     static func looksLikeBillingJSON(_ data: Data) -> Bool {
@@ -386,12 +399,23 @@ enum QuotaParsing {
         ]) ?? productUsagePercent(root)
         guard let usedPercent else { return nil }
 
+        if root["enabled"] as? Bool == false
+            || root["hasAccess"] as? Bool == false
+            || root["entitled"] as? Bool == false
+        {
+            return nil
+        }
         let reset = parseISODate(root["nextResetTimestampUtc"] as? String)
         let start = parseISODate(root["currentPeriodStart"] as? String)
             ?? parseISODate(root["periodStartTimestampUtc"] as? String)
             ?? parseISODate(root["currentPeriodStartUtc"] as? String)
+        let title = SubscriptionPlanName.namedString(
+            in: root,
+            keys: ["displayName", "featureName", "planName", "name"]
+        ).map(SubscriptionPlanName.grokBotDisplay) ?? "Grok Bot"
         return percentBar(
             kind: .grokBot,
+            title: title,
             usedPercent: usedPercent,
             subtitle: "Weekly usage",
             detail: resetCaption(reset: reset, now: now),
@@ -421,11 +445,18 @@ enum QuotaParsing {
         let start = parseISODate(
             (period?["start"] as? String) ?? (config["billingPeriodStart"] as? String)
         )
+        let subscribed = config["hasSubscription"] as? Bool
+            ?? config["subscribed"] as? Bool
+            ?? config["isSubscriber"] as? Bool
+        if subscribed == false, usedPercent == nil {
+            return nil
+        }
         // Unified-billing payloads drop creditUsagePercent after a weekly reset.
         // A period with no percent is 0% used, not a sign-in failure.
         guard usedPercent != nil || start != nil || reset != nil else { return nil }
         return percentBar(
             kind: .superGrok,
+            title: SubscriptionPlanName.grok(from: config),
             usedPercent: usedPercent ?? 0,
             subtitle: "Weekly usage",
             detail: resetCaption(reset: reset, now: now),
@@ -437,6 +468,7 @@ enum QuotaParsing {
 
     static func percentBar(
         kind: QuotaKind,
+        title: String? = nil,
         usedPercent: Double,
         subtitle: String,
         detail: String,
@@ -448,6 +480,7 @@ enum QuotaParsing {
         let periodStart = start ?? inferredPeriodStart(for: kind, reset: reset)
         return QuotaBar(
             kind: kind,
+            title: title ?? kind.title,
             usedFraction: min(1, used / 100),
             usedPercent: used,
             usedText: "\(wholePercent(used))% used",
@@ -611,15 +644,114 @@ enum QuotaParsing {
     }
 }
 
+enum SubscriptionPlanName {
+    static func cursor(from root: [String: Any]) -> String? {
+        guard let raw = namedString(in: root, keys: [
+            "membershipType",
+            "individualMembershipType",
+            "stripeMembershipType",
+            "teamMembershipType",
+            "membership",
+            "planName",
+            "subscriptionName",
+        ]) else { return nil }
+        return cursorDisplay(raw)
+    }
+
+    static func cursorDisplay(_ raw: String) -> String {
+        let key = normalized(raw)
+        switch key {
+        case "ultra": return "Cursor Ultra"
+        case "pro": return "Cursor Pro"
+        case "proplus", "pro+": return "Cursor Pro+"
+        case "free", "hobby", "freetrial": return "Cursor Free"
+        case "business", "team": return "Cursor Business"
+        case "enterprise": return "Cursor Enterprise"
+        default:
+            let pretty = prettify(raw)
+            if pretty.lowercased().hasPrefix("cursor") { return pretty }
+            return "Cursor \(pretty)"
+        }
+    }
+
+    static func grok(from config: [String: Any]) -> String {
+        if let raw = namedString(in: config, keys: [
+            "planName",
+            "planDisplayName",
+            "subscriptionName",
+            "tierName",
+            "membershipName",
+            "subscriptionTier",
+            "tier",
+            "grokPlan",
+            "productName",
+        ]), let display = grokDisplay(raw) {
+            return display
+        }
+        return "Grok"
+    }
+
+    static func grokDisplay(_ raw: String) -> String? {
+        let key = normalized(raw)
+        if key.isEmpty || key.contains("usageperiod") || key == "weekly" || key == "monthly" || key == "credits" {
+            return nil
+        }
+        if key.contains("supergrok"), key.contains("heavy") { return "SuperGrok Heavy" }
+        if key.contains("supergrok") { return "SuperGrok" }
+        if key.contains("grok"), key.contains("heavy") { return "SuperGrok Heavy" }
+        let pretty = prettify(raw)
+        return pretty.isEmpty ? nil : pretty
+    }
+
+    static func grokBotDisplay(_ raw: String) -> String {
+        let pretty = prettify(raw)
+        return pretty.isEmpty ? "Grok Bot" : pretty
+    }
+
+    static func namedString(in root: [String: Any], keys: [String]) -> String? {
+        var sources: [[String: Any]] = [root]
+        for nest in ["plan", "subscription", "membership", "billing"] {
+            if let child = root[nest] as? [String: Any] {
+                sources.append(child)
+            }
+        }
+        for source in sources {
+            for key in keys {
+                guard let text = source[key] as? String else { continue }
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        }
+        return nil
+    }
+
+    private static func normalized(_ raw: String) -> String {
+        raw.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "+" }
+    }
+
+    private static func prettify(_ raw: String) -> String {
+        let words = raw
+            .replacingOccurrences(of: "_", with: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .split(separator: " ")
+            .map { part -> String in
+                let word = String(part)
+                if word.count <= 3, word == word.uppercased() { return word }
+                return word.prefix(1).uppercased() + word.dropFirst().lowercased()
+            }
+        return words.joined(separator: " ")
+    }
+}
+
 enum QuotaUnavailableCopy {
-    static let superGrokUnavailable = "SuperGrok Heavy usage is unavailable"
-    static let superGrokNeedsGrokApp = "Sign in to grok.com in Grok.app to load SuperGrok"
+    static let grokUnavailable = "Grok usage is unavailable"
+    static let grokNeedsSignIn = "Sign in with the grok CLI or Grok.app"
 
     static func superGrok(hasGrokBilling: Bool, hasGrokSession: Bool) -> String {
         if !hasGrokBilling && !hasGrokSession {
-            return superGrokNeedsGrokApp
+            return grokNeedsSignIn
         }
-        return superGrokUnavailable
+        return grokUnavailable
     }
 }
 

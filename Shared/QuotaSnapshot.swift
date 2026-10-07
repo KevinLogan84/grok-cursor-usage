@@ -63,7 +63,7 @@ struct SnapshotQuotaBar: Codable, Equatable, Sendable, Identifiable {
         usedFraction = bar.usedFraction
         limitFraction = 1
         usedText = bar.usedText
-        label = bar.kind.title
+        label = bar.title
         subtitle = bar.subtitle
         detail = bar.detail
         pace = bar.pace
@@ -136,19 +136,20 @@ enum QuotaSnapshotPublishPolicy {
         return outgoing
     }
 
+    /// A plan missing from `next` is gone. A loading placeholder keeps the last ready bar for that same plan.
     static func mergeBars(
         previous: [SnapshotQuotaBar],
         next: [SnapshotQuotaBar],
         order: [QuotaKind]
     ) -> [SnapshotQuotaBar] {
         order.compactMap { kind in
-            if let bar = next.first(where: { $0.kind == kind }), !bar.isLoadingPlaceholder {
-                return bar
+            guard let incoming = next.first(where: { $0.kind == kind }) else { return nil }
+            if incoming.isLoadingPlaceholder,
+               let prior = previous.first(where: { $0.kind == kind && !$0.isLoadingPlaceholder }) {
+                return prior
             }
-            if let bar = previous.first(where: { $0.kind == kind }), !bar.isLoadingPlaceholder {
-                return bar
-            }
-            return nil
+            if incoming.isLoadingPlaceholder { return nil }
+            return incoming
         }
     }
 

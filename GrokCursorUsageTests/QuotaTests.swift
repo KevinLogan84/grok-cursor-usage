@@ -17,12 +17,36 @@ struct QuotaTests {
         }
         """.data(using: .utf8)!
         let now = Date(timeIntervalSince1970: 1_787_433_600)
-        let bars = try #require(QuotaParsing.cursorModelBars(from: json, now: now))
-        #expect(bars.cursorModels.usedText == "11% used")
-        #expect(bars.cursorModels.subtitle == "Includes Cursor Grok")
-        #expect(bars.otherModels.usedText == "23% used")
-        #expect(bars.cursorModels.detail.contains("Resets"))
-        #expect(bars.cursorModels.detail.contains("left"))
+        let bars = try #require(QuotaParsing.cursorBars(from: json, now: now))
+        #expect(bars.count == 2)
+        #expect(bars[0].title == "Cursor Auto")
+        #expect(bars[0].subtitle == "Auto")
+        #expect(bars[0].usedText == "11% used")
+        #expect(bars[1].title == "Cursor API")
+        #expect(bars[1].subtitle == "API models")
+        #expect(bars[1].usedText == "23% used")
+        #expect(bars[0].detail.contains("Resets"))
+        #expect(bars[0].detail.contains("left"))
+    }
+
+    @Test
+    func cursorPlanNameTitlesBothPoolsAndDropsAMissingPool() throws {
+        let ultra = """
+        {
+          "membershipType": "ultra",
+          "planUsage": { "autoPercentUsed": 4, "apiPercentUsed": 80 }
+        }
+        """.data(using: .utf8)!
+        let both = try #require(QuotaParsing.cursorBars(from: ultra))
+        #expect(both.map(\.title) == ["Cursor Ultra", "Cursor Ultra"])
+        #expect(both.map(\.subtitle) == ["Auto", "API models"])
+
+        let autoOnly = """
+        { "membershipType": "pro", "planUsage": { "autoPercentUsed": 12 } }
+        """.data(using: .utf8)!
+        let one = try #require(QuotaParsing.cursorBars(from: autoOnly))
+        #expect(one.map(\.kind) == [.cursorModels])
+        #expect(one[0].title == "Cursor Pro")
     }
 
     @Test
@@ -40,10 +64,36 @@ struct QuotaTests {
         let now = QuotaParsing.parseISODate("2026-08-22T21:28:00Z")!
         let bar = try #require(QuotaParsing.superGrokBar(from: json, now: now))
         #expect(bar.kind == .superGrok)
+        #expect(bar.title == "Grok")
         #expect(bar.usedText == "15% used")
         #expect(bar.subtitle == "Weekly usage")
         #expect(bar.detail.contains("Resets"))
         #expect(bar.detail.contains("left"))
+    }
+
+    @Test
+    func grokPlanNameComesFromTheAccountAndAMissingPlanIsOmitted() throws {
+        let heavy = """
+        { "subscriptionTier": "SUPERGROK_HEAVY", "creditUsagePercent": 8 }
+        """.data(using: .utf8)!
+        let heavyBar = try #require(QuotaParsing.superGrokBar(from: heavy))
+        #expect(heavyBar.title == "SuperGrok Heavy")
+
+        let standard = """
+        { "planName": "SuperGrok", "creditUsagePercent": 3 }
+        """.data(using: .utf8)!
+        let standardBar = try #require(QuotaParsing.superGrokBar(from: standard))
+        #expect(standardBar.title == "SuperGrok")
+
+        let unsubscribed = """
+        { "hasSubscription": false }
+        """.data(using: .utf8)!
+        #expect(QuotaParsing.superGrokBar(from: unsubscribed) == nil)
+
+        let botOff = """
+        { "enabled": false, "usagePercent": 10 }
+        """.data(using: .utf8)!
+        #expect(QuotaParsing.grokBotBar(from: botOff) == nil)
     }
 
     @Test
@@ -72,11 +122,11 @@ struct QuotaTests {
     @Test
     func grokUnavailableCopyNeverAsksForCLILoginWhenSessionExists() {
         let superGrok = QuotaUnavailableCopy.superGrok(hasGrokBilling: false, hasGrokSession: true)
-        #expect(superGrok == QuotaUnavailableCopy.superGrokUnavailable)
+        #expect(superGrok == QuotaUnavailableCopy.grokUnavailable)
         #expect(!superGrok.lowercased().contains("grok login"))
         #expect(
             QuotaUnavailableCopy.superGrok(hasGrokBilling: false, hasGrokSession: false)
-                == QuotaUnavailableCopy.superGrokNeedsGrokApp
+                == QuotaUnavailableCopy.grokNeedsSignIn
         )
     }
 
@@ -627,8 +677,8 @@ struct QuotaTests {
             kind: .cursorModels,
             usedFraction: 0.1,
             usedText: "10% used",
-            label: "Cursor Models",
-            subtitle: "Includes Cursor Grok",
+            label: "Cursor Ultra",
+            subtitle: "Auto",
             detail: "Resets"
         )
         let previous = QuotaSnapshot(
@@ -652,6 +702,7 @@ struct QuotaTests {
         )
         let prepared = QuotaSnapshotPublishPolicy.prepared(previous: previous, next: next)
         #expect(prepared.bars.first?.usedText == "10% used")
+        #expect(prepared.bars.first?.label == "Cursor Ultra")
         var quiet = prepared
         quiet.lastUpdated = previous.lastUpdated.addingTimeInterval(30)
         #expect(!QuotaSnapshotPublishPolicy.shouldWrite(previous: previous, next: quiet))
