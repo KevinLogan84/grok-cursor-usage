@@ -32,19 +32,18 @@ struct GuideView: View {
                         bullet("SuperGrok via the CLI", "Sign in with the grok CLI so ~/.grok/auth.json exists. GROK_HOME and GROK_AUTH_JSON are honored.")
                         bullet("SuperGrok via Grok.app", "Sign in to grok.com in Grok.app. If the bar still asks you to sign in, turn on Full Disk Access for Grok & Cursor Usage so it can read Grok.app’s cookie file.")
                     }
-                    section("While you test") {
+                    section("While it is running") {
                         bullet("Refresh", "Usage reloads when you open the app, every 5 minutes, and when you click Refresh.")
                         bullet("Pace", "“Over”, “under”, and “on pace” compare percent used with how much of the billing period has elapsed.")
                         bullet("Spike alerts", "Once a Chicago day, a bar that climbs 15 points from its first reading that day posts a notification. Turn Spike alerts off to skip that.")
-                        bullet("Open at Login", "Turn this on after you copy the app into /Applications. Login items need a stable copy, not a build still sitting in Xcode’s DerivedData.")
-                        bullet("Alongside Usage Meter", "Leave Usage Meter running. This app does not change it. Both can notify you about the same spike while you test.")
+                        bullet("Open at Login", "Turn this on after you copy the app into /Applications. In Xcode, use Product → Show Build Folder in Finder and copy Build/Products/Debug/Grok & Cursor Usage.app. Login items need that copy, not a build still sitting in DerivedData.")
                     }
                     section("On your iPhone") {
-                        Text("The iPhone app only shows these four bars. It never signs in to Cursor or Grok. The Mac writes the card to iCloud, and the phone reads it. This iCloud store is not Usage Meter’s, so the two phone apps do not overwrite each other.")
+                        Text("The iPhone app is optional. It only shows the snapshot this Mac last wrote to iCloud. It never signs in to Cursor or Grok. Building it is covered in the README: use your own Apple team, your own bundle IDs, and an iCloud container your developer account owns. The container checked into the repo belongs to the author.")
                         bullet("Same iCloud account", "Sign the Mac and the iPhone into the same Apple ID.")
+                        bullet("Same signing team", "Sign the Mac app and the GrokCursorUsageIOS scheme with your Apple team. Enable iCloud Key-value storage and your container on both App IDs.")
                         bullet("Run the Mac app", "Leave Grok & Cursor Usage running once so it can publish a snapshot.")
-                        bullet("Run the iPhone app", "In Xcode, select the GrokCursorUsageIOS scheme, team KVVL57G45T, and your iPhone. If signing asks, enable iCloud Key-value storage and the CloudKit container iCloud.com.grokcursorusage for both App IDs.")
-                        bullet("Refresh", "The phone updates when iCloud delivers a new snapshot. REFRESH asks iCloud again.")
+                        bullet("Refresh", "The phone updates when iCloud delivers a new snapshot. REFRESH asks iCloud again. The iPhone target requires iOS 26.")
                     }
                     section("If a bar stays blank") {
                         Text("The line under the title is the next step: open Cursor, or sign in to grok.com in Grok.app. A Cursor or Grok change can also blank a bar until this app is updated. Quit is in the menu. There is no Dock icon.")

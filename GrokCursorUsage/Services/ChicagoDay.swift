@@ -1,7 +1,7 @@
 import Foundation
 
 /// Day keys for spike alerts. Quota periods reset on the provider's clock;
-/// "today" for the 15-point alert is a Chicago calendar day, matching Usage Meter.
+/// "today" for the 15-point alert is a Chicago calendar day.
 enum ChicagoDay {
     static let timeZone = TimeZone(identifier: "America/Chicago")!
 
