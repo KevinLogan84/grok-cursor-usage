@@ -61,7 +61,7 @@ final class AppearancePreferenceStore {
         preference.colorScheme ?? systemScheme
     }
 
-    /// 1.25 is a quarter larger than the original menu. The slider moves around that.
+    /// `MenuMetrics.defaultScale` reads as 100%. The slider moves around that.
     var interfaceScale: Double {
         didSet {
             let clamped = MenuMetrics.clamp(interfaceScale)
@@ -128,10 +128,10 @@ final class AppearancePreferenceStore {
 #endif
 }
 
-/// Sizes for the Mac menu. `defaultScale` is a quarter larger than the original
-/// layout and is shown as 100%. Text Size runs from 75% to 125% of it.
+/// Sizes for the Mac menu. `defaultScale` is shown as 100%, and Text Size runs
+/// from 75% to 125% of it.
 enum MenuMetrics {
-    static let defaultScale = 1.25
+    static let defaultScale = 0.9375
     static let minimumPercent = 75.0
     static let maximumPercent = 125.0
     static let percentStep = 5.0

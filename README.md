@@ -5,7 +5,7 @@ A macOS menu bar app that shows how much of your Cursor and Grok plan you have u
 ![The Grok & Cursor Usage menu, showing Cursor and Grok usage bars](docs/screenshot.png)
 
 - **Menu bar at a glance.** Shows the pool you used most recently and its percent, such as `CUR` / `11%`. It switches when a different pool moves.
-- **Every pool in one menu.** Cursor Auto, Cursor API, Grok, and Grok Bot, each titled with the plan name the service reports. Pools your account does not have are left off.
+- **Every pool in one menu.** Cursor Auto, Cursor API, Grok, and Grok Bot. When a service reports your plan name, such as Cursor Pro or SuperGrok, that becomes the title. Pools your account does not have are left off.
 - **Pace.** Each bar says whether you are over, under, or on pace for its billing period, and when it resets.
 - **Spike Alerts.** An optional notification when a pool climbs 15 points in one day.
 - **Settings.** Text size from 75% to 125%, System, Light, or Dark appearance, and Open at Login.
@@ -57,18 +57,18 @@ To keep the app after you close Xcode, choose **Product → Show Build Folder in
 
 | Pool | Shows up when |
 | --- | --- |
-| Cursor Auto and Cursor API | Cursor is signed in on this Mac. The title is the plan, such as Cursor Pro or Cursor Ultra. |
-| Grok | The grok CLI (`~/.grok/auth.json`, or `GROK_HOME` / `GROK_AUTH_JSON`) or Grok.app is signed in. The title is the plan, such as SuperGrok or SuperGrok Heavy. |
-| Grok Bot | Cursor reports a Grok Bot allowance. |
+| Cursor Auto and Cursor API | Cursor is signed in on this Mac. |
+| Grok | The grok CLI (`~/.grok/auth.json`) or Grok.app is signed in. |
+| Grok Bot | Cursor reports a Grok Bot allowance for your account. |
 
-Cursor’s token is read from `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`.
+Cursor’s token is read from `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`. The `GROK_HOME` and `GROK_AUTH_JSON` environment variables are honored, but an app opened from Finder does not see variables set in your shell profile. To use them, add them under **Product → Scheme → Edit Scheme → Run → Arguments → Environment Variables**. They apply only when Xcode launches the app.
 
 ## Using it
 
 - Usage reloads at launch, every minute, and when you click **Refresh**.
-- The **Usage** tab lists every pool. The line under each title is the reset date, or the next step if a pool cannot be read.
+- The **Usage** tab lists every pool with its reset date. If a pool cannot be read, its row says what to do next.
 - Pace compares percent used with how much of that pool’s period has passed.
-- **Spike Alerts** posts once per day when a pool climbs 15 points from its first reading that day. The day follows your Mac’s time zone. If macOS never asks for permission, use **Open Notification Settings** in the **Settings** tab.
+- **Spike Alerts** posts at most once per pool per day, when that pool climbs 15 points from its first reading that day. The day follows your Mac’s time zone. macOS asks for notification permission when you turn it on. If you declined, the **Settings** tab shows **Open Notification Settings**.
 - The **Settings** tab holds Text Size, Appearance, Open at Login, Spike Alerts, and the in-app **Guide**.
 - **Quit** is in the menu header.
 
@@ -78,13 +78,17 @@ Cursor’s token is read from `~/Library/Application Support/Cursor/User/globalS
 
 **Cursor says to open Cursor.** Open Cursor once and stay signed in, then click **Refresh**.
 
-**A bar went blank after it used to work.** Cursor or Grok may have changed their usage response. Pull the latest code, or open an issue.
+**A bar went blank after it used to work.** Cursor and xAI do not publish these usage endpoints, so a change on their side can break a bar. Pull the latest code, or [open an issue](https://github.com/KevinLogan84/grok-cursor-usage/issues).
 
 **Xcode signing errors.** Make sure **Team** is set on the target you are building and the bundle ID is one your team owns. On a free Apple ID, remove the iCloud keys listed above.
 
 ## Privacy
 
-The app has no server, analytics, or tracking. It reads the Cursor and Grok sign-ins already on your Mac and sends them only to Cursor (`api2.cursor.sh`) and xAI (`grok.com`, `x.ai`) to request your usage. If iCloud is enabled, the latest usage numbers are written to your own iCloud key-value store so the iPhone viewer can show them. No tokens are written to iCloud.
+The project runs no server and includes no analytics or tracking.
+
+- **What it reads:** Cursor’s local database (`state.vscdb`), the grok CLI’s `auth.json`, and, with Full Disk Access, Grok.app’s cookie file. It does not change any of them.
+- **Where it connects:** Cursor (`api2.cursor.sh`) and xAI (`grok.com`, `auth.x.ai`), using those sign-ins to request your usage.
+- **What it stores:** Settings and alert state in the app’s preferences. If iCloud is enabled, the latest usage numbers go to your own iCloud key-value store for the iPhone viewer. Sign-in tokens are never written to iCloud.
 
 ## iPhone viewer (optional)
 
@@ -115,7 +119,7 @@ xcodebuild test -project GrokCursorUsage.xcodeproj -scheme GrokCursorUsage -dest
 
 ## Contributing
 
-Issues and pull requests are welcome. Please run the tests before opening a pull request, and never commit tokens, cookies, or your own team ID.
+Issues and pull requests are welcome. Please run the tests before opening a pull request. Leave your own team, bundle ID, and iCloud container changes out of it, and never commit tokens or cookies.
 
 ## License
 

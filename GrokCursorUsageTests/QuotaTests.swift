@@ -505,13 +505,13 @@ struct QuotaTests {
     }
 
     @Test @MainActor
-    func interfaceScaleStartsAQuarterLargerAndStaysInRange() {
+    func interfaceScaleStartsAtTheDefaultAndStaysInRange() {
         let suite = "com.grokcursorusage.tests.scale.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defaults.removePersistentDomain(forName: suite)
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = AppearancePreferenceStore(defaults: defaults)
-        #expect(store.interfaceScale == 1.25)
+        #expect(store.interfaceScale == MenuMetrics.defaultScale)
         #expect(MenuMetrics.percent(for: store.interfaceScale) == 100)
         #expect(MenuMetrics.percent(for: MenuMetrics.minimumScale) == 75)
         #expect(MenuMetrics.percent(for: MenuMetrics.maximumScale) == 125)
