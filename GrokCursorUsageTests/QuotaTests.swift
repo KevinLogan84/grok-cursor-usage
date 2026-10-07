@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import SwiftUI
 import Testing
+import UserNotifications
 @testable import GrokCursorUsage
 
 struct QuotaTests {
@@ -498,8 +499,8 @@ struct QuotaTests {
 
         let sources = QuotaRefreshSources(
             periodUsage: { period },
-            sandUsage: { sand },
-            grokBilling: { grok },
+            sandUsage: { .payload(sand) },
+            grokBilling: { .usage(grok) },
             hasGrokSession: { true }
         )
         let monitor = QuotaMonitor(
@@ -865,6 +866,449 @@ struct QuotaTests {
         quiet.lastUpdated = previous.lastUpdated.addingTimeInterval(30)
         #expect(!QuotaSnapshotPublishPolicy.shouldWrite(previous: previous, next: quiet))
     }
+
+    @Test
+    func cursorTokenMissingOrExpiredAsksForSignIn() {
+        #expect(CursorAccessToken.state(of: nil) == .missing)
+        #expect(CursorAccessToken.state(of: "   ") == .missing)
+        #expect(CursorAccessToken.state(of: "opaque-token") == .present)
+
+        let expired = cursorJWT(exp: 1_700_000_000)
+        let now = Date(timeIntervalSince1970: 1_750_000_000)
+        #expect(CursorAccessToken.state(of: expired, now: now) == .expired)
+        let live = cursorJWT(exp: 1_800_000_000)
+        #expect(CursorAccessToken.state(of: live, now: now) == .present)
+
+        let rejected = Data(#"{"error":"unauthenticated"}"#.utf8)
+        #expect(CursorAccessToken.payloadRejectsSignIn(rejected))
+        #expect(SandUsageFetch.from(.success(rejected)) == .needsSignIn)
+        #expect(SandUsageFetch.from(.noToken) == .needsSignIn)
+        #expect(SandUsageFetch.from(.expired) == .needsSignIn)
+        #expect(SandUsageFetch.from(.failed) == .failed)
+
+        let allowance = Data(#"{"usagePercent":12}"#.utf8)
+        #expect(!CursorAccessToken.payloadRejectsSignIn(allowance))
+        #expect(SandUsageFetch.from(.success(allowance)) == .payload(allowance))
+    }
+
+    @Test @MainActor
+    func grokBotRowExplainsAMissingCursorSignInAndHidesARealMiss() async {
+        let signedOut = QuotaRefreshSources(
+            periodUsage: { nil },
+            sandUsage: { .needsSignIn },
+            grokBilling: { .unavailable },
+            hasGrokSession: { false }
+        )
+        let (signedOutMonitor, signedOutSuite) = makeMonitor(sources: signedOut)
+        defer { UserDefaults(suiteName: signedOutSuite)?.removePersistentDomain(forName: signedOutSuite) }
+        await signedOutMonitor.refresh()
+        let bot = signedOutMonitor.bars.first { $0.kind == .grokBot }
+        #expect(bot?.detail == QuotaUnavailableCopy.grokBotNeedsCursorSignIn)
+        #expect(bot?.state == .unavailable(QuotaUnavailableCopy.grokBotNeedsCursorSignIn))
+        let cursor = signedOutMonitor.bars.first { $0.kind == .cursorModels }
+        #expect(cursor?.detail == "Open Cursor once so this Mac can read usage")
+
+        let failed = QuotaRefreshSources(
+            periodUsage: { nil },
+            sandUsage: { .failed },
+            grokBilling: { .unavailable },
+            hasGrokSession: { false }
+        )
+        let (failedMonitor, failedSuite) = makeMonitor(sources: failed)
+        defer { UserDefaults(suiteName: failedSuite)?.removePersistentDomain(forName: failedSuite) }
+        await failedMonitor.refresh()
+        #expect(
+            failedMonitor.bars.first { $0.kind == .grokBot }?.detail
+                == QuotaUnavailableCopy.grokBotUnavailable
+        )
+
+        let period = """
+        { "planUsage": { "autoPercentUsed": 8, "apiPercentUsed": 9 } }
+        """.data(using: .utf8)!
+        let noAllowance = Data(#"{"enabled":false,"usagePercent":4}"#.utf8)
+        let signedIn = QuotaRefreshSources(
+            periodUsage: { period },
+            sandUsage: { .payload(noAllowance) },
+            grokBilling: { .unavailable },
+            hasGrokSession: { false }
+        )
+        let (signedInMonitor, signedInSuite) = makeMonitor(sources: signedIn)
+        defer { UserDefaults(suiteName: signedInSuite)?.removePersistentDomain(forName: signedInSuite) }
+        await signedInMonitor.refresh()
+        #expect(signedInMonitor.bars.contains { $0.kind == .cursorModels })
+        #expect(!signedInMonitor.bars.contains { $0.kind == .grokBot })
+    }
+
+    @Test
+    func spikeAlertRebaselinesWhenThePoolResetsMidDay() {
+        let day = "2026-10-07"
+        let morning = QuotaBurnEvaluator.evaluate(
+            dayKey: day,
+            usedFraction: 0.80,
+            storedDayKey: nil,
+            storedStartUsed: nil,
+            notifiedSteps: 0
+        )
+        #expect(!morning.shouldNotify)
+        #expect(morning.startUsed == 0.80)
+        #expect(morning.notifiedSteps == 0)
+
+        let noise = QuotaBurnEvaluator.evaluate(
+            dayKey: day,
+            usedFraction: 0.78,
+            storedDayKey: day,
+            storedStartUsed: morning.startUsed,
+            notifiedSteps: 1,
+            mode: .every
+        )
+        #expect(!noise.shouldNotify)
+        #expect(noise.startUsed == 0.80)
+        #expect(noise.notifiedSteps == 1)
+
+        let reset = QuotaBurnEvaluator.evaluate(
+            dayKey: day,
+            usedFraction: 0.10,
+            storedDayKey: day,
+            storedStartUsed: morning.startUsed,
+            notifiedSteps: 1,
+            mode: .once
+        )
+        #expect(!reset.shouldNotify)
+        #expect(reset.startUsed == 0.10)
+        #expect(reset.notifiedSteps == 0)
+
+        let exactDrop = QuotaBurnEvaluator.evaluate(
+            dayKey: day,
+            usedFraction: 0.35,
+            storedDayKey: day,
+            storedStartUsed: 0.40,
+            notifiedSteps: 2,
+            mode: .every
+        )
+        #expect(exactDrop.startUsed == 0.35)
+        #expect(exactDrop.notifiedSteps == 0)
+
+        let after = QuotaBurnEvaluator.evaluate(
+            dayKey: day,
+            usedFraction: 0.25,
+            storedDayKey: day,
+            storedStartUsed: reset.startUsed,
+            notifiedSteps: reset.notifiedSteps,
+            mode: .once,
+            stepPercent: 15
+        )
+        #expect(after.shouldNotify)
+        #expect(after.notifiedSteps == 1)
+
+        let start = Date(timeIntervalSince1970: 1_000)
+        let end = Date(timeIntervalSince1970: 2_000)
+        let nextEnd = Date(timeIntervalSince1970: 3_000)
+        let periodReset = QuotaBurnEvaluator.evaluate(
+            dayKey: day,
+            usedFraction: 0.40,
+            storedDayKey: day,
+            storedStartUsed: 0.40,
+            notifiedSteps: 2,
+            mode: .every,
+            periodStart: start,
+            periodEnd: nextEnd,
+            storedPeriodStart: start,
+            storedPeriodEnd: end
+        )
+        #expect(!periodReset.shouldNotify)
+        #expect(periodReset.startUsed == 0.40)
+        #expect(periodReset.notifiedSteps == 0)
+
+        let samePeriod = QuotaBurnEvaluator.evaluate(
+            dayKey: day,
+            usedFraction: 0.42,
+            storedDayKey: day,
+            storedStartUsed: 0.40,
+            notifiedSteps: 0,
+            periodStart: start,
+            periodEnd: end.addingTimeInterval(0.4),
+            storedPeriodStart: start,
+            storedPeriodEnd: end
+        )
+        #expect(!samePeriod.shouldNotify)
+        #expect(samePeriod.startUsed == 0.40)
+        #expect(samePeriod.notifiedSteps == 0)
+    }
+
+    @Test @MainActor
+    func spikeAlertPersistsAMidDayResetOnThePoolKeys() async {
+        let poster = RecordingPoster()
+        let suite = "com.grokcursorusage.tests.spikeReset.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let box = BillingBox()
+        let end = Date(timeIntervalSince1970: 1_800_000_000)
+        box.grok = grokBillingJSON(percent: 80, end: end)
+        let sources = QuotaRefreshSources(
+            periodUsage: { nil },
+            sandUsage: { .needsSignIn },
+            grokBilling: { box.grokFetch },
+            hasGrokSession: { true }
+        )
+        let notifier = QuotaAlertNotifier(defaults: defaults, poster: poster)
+        let monitor = QuotaMonitor(defaults: defaults, notifier: notifier, sources: sources, fetchTimeout: .seconds(2))
+
+        await monitor.refresh()
+        let prefix = "com.grokcursorusage.quota.superGrok"
+        #expect(abs(defaults.double(forKey: "\(prefix).startUsed") - 0.80) < 0.001)
+        #expect(defaults.integer(forKey: "\(prefix).steps") == 0)
+        #expect(defaults.object(forKey: "\(prefix).periodEnd") != nil)
+        #expect(poster.count == 0)
+
+        box.grok = grokBillingJSON(percent: 10, end: end.addingTimeInterval(7 * 24 * 60 * 60))
+        await monitor.refresh()
+        #expect(abs(defaults.double(forKey: "\(prefix).startUsed") - 0.10) < 0.001)
+        #expect(defaults.integer(forKey: "\(prefix).steps") == 0)
+        #expect(poster.count == 0)
+
+        box.grok = grokBillingJSON(percent: 25, end: end.addingTimeInterval(7 * 24 * 60 * 60))
+        await monitor.refresh()
+        #expect(defaults.integer(forKey: "\(prefix).steps") == 1)
+        #expect(poster.count == 1)
+    }
+
+    @Test
+    func grokCLIVersionFallsBackThenRetriesANewerValueOnce() async {
+        #expect(GrokCLIVersion.headerValue(detected: nil) == GrokQuotaClient.cliClientVersion)
+        #expect(GrokCLIVersion.headerValue(detected: "grok 1.8.0") == "1.8.0")
+        #expect(GrokCLIVersion.headerValue(detected: "nope") == GrokQuotaClient.cliClientVersion)
+        #expect(GrokCLIVersion.parse("grok version 1.2.3\n") == "1.2.3")
+        #expect(GrokCLIVersion.isNewer("1.0.41", than: "1.0.40"))
+        #expect(!GrokCLIVersion.isNewer("1.0.9", than: "1.0.40"))
+
+        let package = Data(#"{"name":"@xai-official/grok","version":"1.4.0"}"#.utf8)
+        #expect(GrokCLIVersion.version(inPackageJSON: package) == "1.4.0")
+        let versionFile = Data(#"{"version":"1.2.3","stable_version":"1.0.0"}"#.utf8)
+        #expect(GrokCLIVersion.version(inVersionJSON: versionFile) == "1.2.3")
+
+        let outdated = Data(
+            "Your Grok CLI version (1.0.40) is outdated. Please update to version 1.0.41 or later".utf8
+        )
+        #expect(GrokCLIVersion.isOutdatedClient(statusCode: 426, body: Data()))
+        #expect(GrokCLIVersion.isOutdatedClient(statusCode: 400, body: outdated))
+        #expect(GrokCLIVersion.requiredVersion(in: outdated) == "1.0.41")
+        #expect(
+            GrokCLIVersion.retryVersion(sent: "1.0.40", detected: "1.0.55", serverRequired: "1.0.41")
+                == "1.0.55"
+        )
+        #expect(
+            GrokCLIVersion.retryVersion(sent: "1.0.40", detected: "1.0.42", serverRequired: "1.0.50")
+                == "1.0.50"
+        )
+        #expect(GrokCLIVersion.retryVersion(sent: "1.0.50", detected: "1.0.50", serverRequired: nil) == nil)
+
+        let calls = VersionCalls()
+        let fetch = await GrokQuotaClient.billingFetch(
+            headerVersion: "1.0.40",
+            redetect: { "1.0.40" },
+            perform: { version in
+                calls.add(version)
+                if version == "1.0.40" {
+                    return GrokBillingHTTPResult(statusCode: 426, body: outdated)
+                }
+                return GrokBillingHTTPResult(
+                    statusCode: 200,
+                    body: Data(#"{"creditUsagePercent":3}"#.utf8)
+                )
+            },
+            remember: { calls.remember($0) }
+        )
+        #expect(calls.sent == ["1.0.40", "1.0.41"])
+        #expect(calls.remembered == ["1.0.41"])
+        #expect(fetch == .usage(Data(#"{"creditUsagePercent":3}"#.utf8)))
+
+        let stuck = VersionCalls()
+        let rejected = await GrokQuotaClient.billingFetch(
+            headerVersion: GrokQuotaClient.cliClientVersion,
+            redetect: { nil },
+            perform: { version in
+                stuck.add(version)
+                return GrokBillingHTTPResult(
+                    statusCode: 426,
+                    body: Data("Your Grok CLI version (\(version)) is outdated.".utf8)
+                )
+            }
+        )
+        #expect(stuck.sent == [GrokQuotaClient.cliClientVersion])
+        #expect(rejected == .outdatedClient)
+
+        let other = await GrokQuotaClient.billingFetch(
+            headerVersion: "1.0.40",
+            redetect: { "9.0.0" },
+            perform: { _ in GrokBillingHTTPResult(statusCode: 401, body: Data("unauthorized".utf8)) }
+        )
+        #expect(other == .unavailable)
+    }
+
+    @Test
+    func grokCLIVersionReadsInstallMetadataThenTheCommand() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hotspot-grok-version-\(UUID().uuidString)", isDirectory: true)
+        let home = root.appendingPathComponent(".grok", isDirectory: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try #"{"version":"1.2.3","stable_version":"1.0.0"}"#.write(
+            to: home.appendingPathComponent("version.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let fromFile = GrokCLIVersion.installedVersion(
+            environment: [:],
+            userHome: root,
+            run: { _, _ in "9.9.9" }
+        )
+        #expect(fromFile == "1.2.3")
+
+        try FileManager.default.removeItem(at: home.appendingPathComponent("version.json"))
+        let packageDir = root.appendingPathComponent(
+            "lib/node_modules/@xai-official/grok",
+            isDirectory: true
+        )
+        let binDir = packageDir.appendingPathComponent("bin", isDirectory: true)
+        try FileManager.default.createDirectory(at: binDir, withIntermediateDirectories: true)
+        let binary = binDir.appendingPathComponent("grok")
+        try Data("#!/bin/sh\n".utf8).write(to: binary)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: binary.path)
+        try #"{"name":"@xai-official/grok","version":"1.4.0"}"#.write(
+            to: packageDir.appendingPathComponent("package.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let fromPackage = GrokCLIVersion.installedVersion(
+            environment: [:],
+            userHome: root,
+            executables: [binary],
+            run: { _, _ in "9.9.9" }
+        )
+        #expect(fromPackage == "1.4.0")
+
+        try FileManager.default.removeItem(at: packageDir.appendingPathComponent("package.json"))
+        let command = VersionCalls()
+        let fromCommand = GrokCLIVersion.installedVersion(
+            environment: [:],
+            userHome: root,
+            executables: [binary],
+            run: { url, args in
+                command.add(url.path)
+                command.remember(args.joined(separator: " "))
+                return "grok 2.0.1\n"
+            }
+        )
+        #expect(fromCommand == "2.0.1")
+        #expect(command.sent == [binary.path])
+        #expect(command.remembered == ["--version"])
+
+        let cache = GrokCLIVersionCache()
+        let counter = VersionCalls()
+        let first = await cache.resolved {
+            counter.add("read")
+            return "1.6.0"
+        }
+        let second = await cache.resolved {
+            counter.add("read")
+            return "9.9.9"
+        }
+        #expect(first == "1.6.0")
+        #expect(second == "1.6.0")
+        #expect(counter.sent == ["read"])
+    }
+
+    @Test @MainActor
+    func outdatedGrokCLIShowsARowInsteadOfABlankBar() async {
+        let sources = QuotaRefreshSources(
+            periodUsage: { nil },
+            sandUsage: { .needsSignIn },
+            grokBilling: { .outdatedClient },
+            hasGrokSession: { true }
+        )
+        let (monitor, suite) = makeMonitor(sources: sources)
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        await monitor.refresh()
+        let grok = monitor.bars.first { $0.kind == .superGrok }
+        #expect(grok?.detail == QuotaUnavailableCopy.grokCLIOutdated)
+        #expect(grok?.title == "Grok")
+        #expect(grok?.state == .unavailable(QuotaUnavailableCopy.grokCLIOutdated))
+    }
+}
+
+@MainActor
+private func makeMonitor(sources: QuotaRefreshSources) -> (QuotaMonitor, String) {
+    let suite = "com.grokcursorusage.tests.monitor.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    let monitor = QuotaMonitor(
+        defaults: defaults,
+        notifier: QuotaAlertNotifier(defaults: defaults),
+        sources: sources,
+        fetchTimeout: .seconds(2)
+    )
+    return (monitor, suite)
+}
+
+private func grokBillingJSON(percent: Double, end: Date) -> GrokBillingFetch {
+    let stamp = ISO8601DateFormatter().string(from: end)
+    let json = """
+    {"creditUsagePercent":\(percent),"currentPeriod":{"end":"\(stamp)"}}
+    """
+    return .usage(Data(json.utf8))
+}
+
+private final class BillingBox: @unchecked Sendable {
+    var grok: GrokBillingFetch = .unavailable
+    var grokFetch: GrokBillingFetch { grok }
+}
+
+@MainActor
+private final class RecordingPoster: NotificationRequestPosting {
+    var count = 0
+    func post(_ request: UNNotificationRequest) { count += 1 }
+}
+
+private final class VersionCalls: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String] = []
+    private var kept: [String] = []
+
+    func add(_ value: String) {
+        lock.lock()
+        values.append(value)
+        lock.unlock()
+    }
+
+    func remember(_ value: String) {
+        lock.lock()
+        kept.append(value)
+        lock.unlock()
+    }
+
+    var sent: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return values
+    }
+
+    var remembered: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return kept
+    }
+}
+
+private func cursorJWT(exp: Int) -> String {
+    func part(_ json: String) -> String {
+        Data(json.utf8)
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+    return part(#"{"alg":"none"}"#) + "." + part(#"{"exp":\#(exp)}"#)
 }
 
 private func binarycookiesInt32BE(_ data: Data, _ offset: Int) -> Int {

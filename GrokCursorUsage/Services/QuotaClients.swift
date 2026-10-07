@@ -20,14 +20,16 @@ enum TimedProcess {
     static func run(
         executable: URL,
         arguments: [String],
-        timeout: TimeInterval = defaultTimeout
+        timeout: TimeInterval = defaultTimeout,
+        captureStandardError: Bool = false
     ) -> Outcome {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
         let stdout = Pipe()
+        let stderr = Pipe()
         process.standardOutput = stdout
-        process.standardError = Pipe()
+        process.standardError = stderr
 
         let exited = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in exited.signal() }
@@ -47,14 +49,25 @@ enum TimedProcess {
             return Outcome(output: nil, timedOut: true, terminationStatus: process.terminationStatus)
         }
 
-        let data = stdout.fileHandleForReading.readDataToEndOfFile()
-        let text = String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let output = (text?.isEmpty == false) ? text : nil
-        guard process.terminationStatus == 0 else {
+        let output = pipeText(stdout, stderr, captureStandardError: captureStandardError)
+        guard process.terminationStatus == 0 || captureStandardError else {
             return Outcome(output: nil, timedOut: false, terminationStatus: process.terminationStatus)
         }
         return Outcome(output: output, timedOut: false, terminationStatus: process.terminationStatus)
+    }
+
+    private static func pipeText(_ stdout: Pipe, _ stderr: Pipe, captureStandardError: Bool) -> String? {
+        let out = text(stdout.fileHandleForReading.readDataToEndOfFile())
+        guard captureStandardError else { return out }
+        let err = text(stderr.fileHandleForReading.readDataToEndOfFile())
+        let parts = [out, err].compactMap { $0 }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n")
+    }
+
+    private static func text(_ data: Data) -> String? {
+        let text = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (text?.isEmpty == false) ? text : nil
     }
 
     private static func forceStop(_ process: Process) {
@@ -276,17 +289,124 @@ enum CursorStateStore {
     }
 }
 
+/// Why a Cursor dashboard call did not return usage.
+enum CursorDashboardResult: Sendable, Equatable {
+    case noToken
+    case expired
+    case success(Data)
+    case failed
+}
+
+/// GetSandUsageStatus, classified so a missing Cursor sign-in is not treated
+/// as "this account has no Grok Bot allowance".
+enum SandUsageFetch: Sendable, Equatable {
+    /// No Cursor token, or Cursor rejected it.
+    case needsSignIn
+    /// Signed in. The body is the GetSandUsageStatus payload.
+    case payload(Data)
+    /// Signed in, but the request failed for another reason.
+    case failed
+
+    static func from(_ result: CursorDashboardResult) -> SandUsageFetch {
+        switch result {
+        case .noToken, .expired:
+            return .needsSignIn
+        case .failed:
+            return .failed
+        case .success(let data):
+            if CursorAccessToken.payloadRejectsSignIn(data) {
+                return .needsSignIn
+            }
+            return .payload(data)
+        }
+    }
+}
+
+enum CursorAccessToken {
+    enum State: Equatable, Sendable {
+        case missing
+        case expired
+        case present
+    }
+
+    static func state(of token: String?, now: Date = .now) -> State {
+        guard let token = token?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty else {
+            return .missing
+        }
+        if let expiry = jwtExpiry(token), expiry <= now {
+            return .expired
+        }
+        return .present
+    }
+
+    /// `exp` from a JWT-shaped Cursor token. Opaque tokens return nil.
+    static func jwtExpiry(_ token: String) -> Date? {
+        let parts = token.split(separator: ".")
+        guard parts.count >= 2 else { return nil }
+        var payload = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let padding = (4 - payload.count % 4) % 4
+        payload += String(repeating: "=", count: padding)
+        guard let data = Data(base64Encoded: payload),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let exp = QuotaParsing.number(from: json["exp"]),
+              exp > 1_000_000_000
+        else { return nil }
+        return Date(timeIntervalSince1970: exp)
+    }
+
+    /// A 200 body that is an auth failure, not a usage payload.
+    static func payloadRejectsSignIn(_ data: Data) -> Bool {
+        let markers = [
+            "unauthenticated",
+            "unauthorized",
+            "invalid token",
+            "token expired",
+            "expired token",
+            "not authenticated",
+        ]
+        var texts: [String] = []
+        if let root = QuotaParsing.jsonObject(from: data) {
+            for key in ["error", "code", "message", "status"] {
+                if let text = root[key] as? String { texts.append(text) }
+            }
+            if let error = root["error"] as? [String: Any] {
+                for key in ["code", "message", "status"] {
+                    if let text = error[key] as? String { texts.append(text) }
+                }
+            }
+        } else if let text = String(data: data, encoding: .utf8) {
+            texts.append(text)
+        }
+        let joined = texts.joined(separator: " ").lowercased()
+        return markers.contains { joined.contains($0) }
+    }
+}
+
 enum CursorQuotaClient {
     static func fetchPeriodUsage() async -> Data? {
-        await postDashboard("GetCurrentPeriodUsage")
+        if case .success(let data) = await postDashboard("GetCurrentPeriodUsage") {
+            return data
+        }
+        return nil
     }
 
-    static func fetchSandUsage() async -> Data? {
-        await postDashboard("GetSandUsageStatus")
+    static func fetchSandUsage() async -> SandUsageFetch {
+        SandUsageFetch.from(await postDashboard("GetSandUsageStatus"))
     }
 
-    private static func postDashboard(_ method: String) async -> Data? {
-        guard let token = await readAccessToken() else { return nil }
+    private static func postDashboard(_ method: String) async -> CursorDashboardResult {
+        let raw = await readAccessToken()
+        switch CursorAccessToken.state(of: raw) {
+        case .missing:
+            return .noToken
+        case .expired:
+            return .expired
+        case .present:
+            break
+        }
+        guard let token = raw else { return .noToken }
         var request = URLRequest(
             url: URL(string: "https://api2.cursor.sh/aiserver.v1.DashboardService/\(method)")!
         )
@@ -297,10 +417,13 @@ enum CursorQuotaClient {
         request.httpBody = Data("{}".utf8)
         request.timeoutInterval = 20
         guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode)
-        else { return nil }
-        return data
+              let http = response as? HTTPURLResponse
+        else { return .failed }
+        if http.statusCode == 401 || http.statusCode == 403 {
+            return .expired
+        }
+        guard (200..<300).contains(http.statusCode) else { return .failed }
+        return .success(data)
     }
 
     private static func readAccessToken() async -> String? {
@@ -425,10 +548,223 @@ final class GrokSignInSourceStore {
     }
 }
 
+/// cli-chat-proxy billing. `.outdatedClient` is a version rejection after one retry.
+enum GrokBillingFetch: Sendable, Equatable {
+    case usage(Data)
+    case outdatedClient
+    case unavailable
+}
+
+struct GrokBillingHTTPResult: Sendable, Equatable {
+    var statusCode: Int
+    var body: Data
+}
+
+/// The `x-grok-client-version` header. Prefer the installed grok CLI, then
+/// `cliClientVersion`. One newer retry when the proxy says the client is outdated.
+enum GrokCLIVersion {
+    static func headerValue(detected: String?) -> String {
+        if let detected, let parsed = parse(detected) { return parsed }
+        return GrokQuotaClient.cliClientVersion
+    }
+
+    static func parse(_ text: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: #"\d+\.\d+\.\d+"#) else { return nil }
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, options: [], range: range),
+              let slice = Range(match.range, in: text)
+        else { return nil }
+        return String(text[slice])
+    }
+
+    static func version(inPackageJSON data: Data) -> String? {
+        guard let root = QuotaParsing.jsonObject(from: data),
+              let raw = root["version"] as? String
+        else { return nil }
+        return parse(raw)
+    }
+
+    /// Installer metadata. `version` wins over `stable_version`.
+    static func version(inVersionJSON data: Data) -> String? {
+        guard let root = QuotaParsing.jsonObject(from: data) else { return nil }
+        for key in ["version", "stable_version"] {
+            if let raw = root[key] as? String, let parsed = parse(raw) {
+                return parsed
+            }
+        }
+        return nil
+    }
+
+    static func isNewer(_ lhs: String, than rhs: String) -> Bool {
+        guard let left = parts(lhs), let right = parts(rhs) else { return false }
+        return left > right
+    }
+
+    static func isOutdatedClient(statusCode: Int, body: Data) -> Bool {
+        if statusCode == 426 { return true }
+        let text = String(data: body, encoding: .utf8)?.lowercased() ?? ""
+        return text.contains("outdated") && (text.contains("version") || text.contains("client"))
+    }
+
+    /// The minimum the server named, such as "update to version 1.0.41 or later".
+    static func requiredVersion(in body: Data) -> String? {
+        guard let text = String(data: body, encoding: .utf8) else { return nil }
+        let patterns = [
+            #"update to version\s+(\d+\.\d+\.\d+)"#,
+            #"version\s+(\d+\.\d+\.\d+)\s+or later"#,
+        ]
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                continue
+            }
+            let range = NSRange(text.startIndex..., in: text)
+            guard let match = regex.firstMatch(in: text, options: [], range: range),
+                  match.numberOfRanges > 1,
+                  let slice = Range(match.range(at: 1), in: text)
+            else { continue }
+            return String(text[slice])
+        }
+        return nil
+    }
+
+    /// One retry version, newer than `sent`. The greater of the server minimum
+    /// and a detected install wins. Nil when there is nothing newer to try.
+    static func retryVersion(sent: String, detected: String?, serverRequired: String?) -> String? {
+        let candidates = [serverRequired, detected.flatMap { parse($0) }].compactMap { $0 }
+        let newer = candidates.filter { isNewer($0, than: sent) }
+        return newer.reduce(String?.none) { best, next in
+            guard let best else { return next }
+            return isNewer(next, than: best) ? next : best
+        }
+    }
+
+    static func versionFileURL(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        userHome: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL {
+        GrokCLIAuth.homeDirectory(environment: environment, userHome: userHome)
+            .appendingPathComponent("version.json")
+    }
+
+    static func packageJSONURLs(for executable: URL) -> [URL] {
+        let resolved = executable.resolvingSymlinksInPath()
+        let bin = resolved.deletingLastPathComponent()
+        let parent = bin.deletingLastPathComponent()
+        return [
+            parent.appendingPathComponent("package.json"),
+            bin.appendingPathComponent("package.json"),
+            parent.appendingPathComponent("lib/node_modules/@xai-official/grok/package.json"),
+        ]
+    }
+
+    /// Version from `~/.grok/version.json` (or `$GROK_HOME`), then package.json
+    /// beside the grok binary, then `grok --version`. Nil when none of those exist.
+    static func installedVersion(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        userHome: URL = FileManager.default.homeDirectoryForCurrentUser,
+        executables: [URL]? = nil,
+        fileManager: FileManager = .default,
+        run: @escaping @Sendable (URL, [String]) -> String? = { url, args in
+            TimedProcess.run(
+                executable: url,
+                arguments: args,
+                timeout: 3,
+                captureStandardError: true
+            ).output
+        }
+    ) -> String? {
+        let versionFile = versionFileURL(environment: environment, userHome: userHome)
+        if let data = try? Data(contentsOf: versionFile), let version = version(inVersionJSON: data) {
+            return version
+        }
+        let binaries = executables ?? executableURLs(environment: environment, userHome: userHome)
+        var commandOutput: String?
+        for binary in binaries {
+            let resolvedPath = binary.resolvingSymlinksInPath().path
+            let exists = fileManager.fileExists(atPath: binary.path)
+                || fileManager.fileExists(atPath: resolvedPath)
+            guard exists else { continue }
+            for packageURL in packageJSONURLs(for: binary) {
+                if let data = try? Data(contentsOf: packageURL),
+                   let version = version(inPackageJSON: data) {
+                    return version
+                }
+            }
+            let canRun = fileManager.isExecutableFile(atPath: binary.path)
+                || fileManager.isExecutableFile(atPath: resolvedPath)
+            if commandOutput == nil, canRun, let output = run(binary, ["--version"]), parse(output) != nil {
+                commandOutput = output
+            }
+        }
+        if let commandOutput, let version = parse(commandOutput) {
+            return version
+        }
+        return nil
+    }
+
+    static func executableURLs(
+        environment: [String: String],
+        userHome: URL
+    ) -> [URL] {
+        var urls: [URL] = []
+        if let path = environment["PATH"] {
+            for directory in path.split(separator: ":") where !directory.isEmpty {
+                urls.append(URL(fileURLWithPath: String(directory), isDirectory: true).appendingPathComponent("grok"))
+            }
+        }
+        urls.append(userHome.appendingPathComponent(".grok/bin/grok"))
+        urls.append(URL(fileURLWithPath: "/opt/homebrew/bin/grok"))
+        urls.append(URL(fileURLWithPath: "/usr/local/bin/grok"))
+        var seen = Set<String>()
+        return urls.filter { seen.insert($0.standardizedFileURL.path).inserted }
+    }
+
+    private struct Parts: Comparable {
+        var major: Int
+        var minor: Int
+        var patch: Int
+
+        static func == (lhs: Parts, rhs: Parts) -> Bool {
+            lhs.major == rhs.major && lhs.minor == rhs.minor && lhs.patch == rhs.patch
+        }
+
+        static func < (lhs: Parts, rhs: Parts) -> Bool {
+            if lhs.major != rhs.major { return lhs.major < rhs.major }
+            if lhs.minor != rhs.minor { return lhs.minor < rhs.minor }
+            return lhs.patch < rhs.patch
+        }
+    }
+
+    private static func parts(_ text: String) -> Parts? {
+        guard let parsed = parse(text) else { return nil }
+        let numbers = parsed.split(separator: ".").compactMap { Int($0) }
+        guard numbers.count == 3 else { return nil }
+        return Parts(major: numbers[0], minor: numbers[1], patch: numbers[2])
+    }
+}
+
+actor GrokCLIVersionCache {
+    private var header: String?
+
+    func current() -> String? { header }
+
+    func set(_ version: String) { header = version }
+
+    /// Remembers the first resolved header so later polls skip `grok --version`.
+    func resolved(_ resolve: @Sendable () -> String) -> String {
+        if let header { return header }
+        let value = resolve()
+        header = value
+        return value
+    }
+}
+
 enum GrokQuotaClient {
-    /// `cli-chat-proxy` version-gates billing. This is the grok CLI release
-    /// current with Grok 4.7 (`@xai-official/grok` 1.0.40).
+    /// Fallback `x-grok-client-version` when the installed grok CLI can't be read.
+    /// This is the grok CLI release current with Grok 4.7 (`@xai-official/grok` 1.0.40).
     static let cliClientVersion = "1.0.40"
+
+    private static let versionCache = GrokCLIVersionCache()
 
     static func hasSessionLogin() -> Bool {
         GrokCLIAuth.hasSessionLogin()
@@ -439,24 +775,78 @@ enum GrokQuotaClient {
         return source.usesGrokApp && GrokAppSession.hasSignedInCookies()
     }
 
-    static func fetchBilling(source: GrokSignInSource = .current()) async -> Data? {
-        if let cli = await fetchCLIBilling() {
-            return cli
+    static func fetchBilling(source: GrokSignInSource = .current()) async -> GrokBillingFetch {
+        let cli = await fetchCLIBilling()
+        if case .usage = cli { return cli }
+        if source.usesGrokApp {
+            let cookies = GrokAppSession.cookies()
+            if !cookies.isEmpty, let web = await GrokWebBillingClient.fetchBilling(cookies: cookies) {
+                return .usage(web)
+            }
         }
-        guard source.usesGrokApp else { return nil }
-        let cookies = GrokAppSession.cookies()
-        guard !cookies.isEmpty else { return nil }
-        return await GrokWebBillingClient.fetchBilling(cookies: cookies)
+        return cli
     }
 
-    private static func fetchCLIBilling() async -> Data? {
-        guard let session = await cliSession() else { return nil }
+    /// Sends `headerVersion`, and on an outdated-client rejection retries once
+    /// with a detected or server-required newer version.
+    static func billingFetch(
+        headerVersion: String,
+        redetect: @Sendable () -> String?,
+        perform: @Sendable (String) async -> GrokBillingHTTPResult?,
+        remember: @Sendable (String) async -> Void = { _ in }
+    ) async -> GrokBillingFetch {
+        guard let first = await perform(headerVersion) else { return .unavailable }
+        if (200..<300).contains(first.statusCode) {
+            return .usage(first.body)
+        }
+        guard GrokCLIVersion.isOutdatedClient(statusCode: first.statusCode, body: first.body) else {
+            return .unavailable
+        }
+        let detected = redetect()
+        guard let retry = GrokCLIVersion.retryVersion(
+            sent: headerVersion,
+            detected: detected,
+            serverRequired: GrokCLIVersion.requiredVersion(in: first.body)
+        ) else {
+            return .outdatedClient
+        }
+        guard let second = await perform(retry) else { return .outdatedClient }
+        if (200..<300).contains(second.statusCode) {
+            await remember(retry)
+            return .usage(second.body)
+        }
+        return .outdatedClient
+    }
+
+    private static func fetchCLIBilling() async -> GrokBillingFetch {
+        guard let session = await cliSession() else { return .unavailable }
+        let header = await headerVersion()
+        return await billingFetch(
+            headerVersion: header,
+            redetect: { GrokCLIVersion.installedVersion() },
+            perform: { version in
+                await billingHTTP(session: session, version: version)
+            },
+            remember: { version in
+                await versionCache.set(version)
+            }
+        )
+    }
+
+    private static func headerVersion() async -> String {
+        if let cached = await versionCache.current() { return cached }
+        let resolved = GrokCLIVersion.headerValue(detected: GrokCLIVersion.installedVersion())
+        await versionCache.set(resolved)
+        return resolved
+    }
+
+    private static func billingHTTP(session: CLISession, version: String) async -> GrokBillingHTTPResult? {
         var request = URLRequest(
             url: URL(string: "https://cli-chat-proxy.grok.com/v1/billing?format=credits")!
         )
         request.setValue("Bearer \(session.token)", forHTTPHeaderField: "Authorization")
         request.setValue("xai-grok-cli", forHTTPHeaderField: "X-XAI-Token-Auth")
-        request.setValue(cliClientVersion, forHTTPHeaderField: "x-grok-client-version")
+        request.setValue(version, forHTTPHeaderField: "x-grok-client-version")
         request.setValue("headless", forHTTPHeaderField: "x-grok-client-mode")
         request.setValue("grok-build", forHTTPHeaderField: "x-grok-client-surface")
         if let userID = session.userID, !userID.isEmpty {
@@ -464,10 +854,9 @@ enum GrokQuotaClient {
         }
         request.timeoutInterval = 20
         guard let (data, response) = try? await URLSession.shared.data(for: request),
-              let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode)
+              let http = response as? HTTPURLResponse
         else { return nil }
-        return data
+        return GrokBillingHTTPResult(statusCode: http.statusCode, body: data)
     }
 
     /// A refreshed token is never written back into the CLI's `auth.json` (that file
