@@ -1,0 +1,342 @@
+import AppKit
+import SwiftUI
+
+enum QuotaMenuBarSummary {
+    struct Display: Equatable {
+        var label: String
+        var value: String
+        var fraction: Double?
+    }
+
+    static func display(for bars: [QuotaBar]) -> Display {
+        let ready = bars.filter(\.isReady)
+        guard let hottest = ready.max(by: { $0.usedPercent < $1.usedPercent }) else {
+            return Display(label: "USE", value: "—", fraction: nil)
+        }
+        let percent = Int(hottest.usedPercent.rounded())
+        return Display(label: shortLabel(hottest.kind), value: "\(percent)%", fraction: hottest.usedFraction)
+    }
+
+    static func tooltip(for bars: [QuotaBar]) -> String {
+        bars.map { bar in
+            if bar.isReady {
+                let pace = bar.pace.map { " · \($0.text)" } ?? ""
+                return "\(bar.kind.title) \(bar.usedText)\(pace)"
+            }
+            let detail = bar.detail.isEmpty ? "unavailable" : bar.detail
+            return "\(bar.kind.title): \(detail)"
+        }.joined(separator: "\n")
+    }
+
+    private static func shortLabel(_ kind: QuotaKind) -> String {
+        switch kind {
+        case .cursorModels: "CUR"
+        case .otherModels: "API"
+        case .superGrok: "GRK"
+        case .grokBot: "BOT"
+        case .onDemand: "OD"
+        case .xaiCredits: "X"
+        }
+    }
+}
+
+@MainActor
+final class StatusBarController {
+    private let model: AppModel
+    private let statusItem: NSStatusItem
+    private var menuPanel: NSPanel?
+    private var guideWindow: NSWindow?
+    private nonisolated(unsafe) var updateTimer: Timer?
+    private nonisolated(unsafe) var localMouseMonitor: Any?
+    private nonisolated(unsafe) var globalMouseMonitor: Any?
+    private var cachedStatusImage: NSImage?
+    private var cachedStatusImageKey: StatusImageCacheKey?
+
+    init(model: AppModel) {
+        self.model = model
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = statusItem.button {
+            button.imagePosition = .imageOnly
+            button.setButtonType(.momentaryPushIn)
+            button.target = self
+            button.action = #selector(toggleMenu(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
+        refreshStatusItem()
+        observeModel()
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshStatusItem()
+            }
+        }
+        if let updateTimer {
+            RunLoop.main.add(updateTimer, forMode: .common)
+        }
+    }
+
+    deinit {
+        updateTimer?.invalidate()
+        if let localMouseMonitor {
+            NSEvent.removeMonitor(localMouseMonitor)
+        }
+        if let globalMouseMonitor {
+            NSEvent.removeMonitor(globalMouseMonitor)
+        }
+    }
+
+    private func observeModel() {
+        withObservationTracking {
+            _ = model.quotas.bars
+            _ = model.quotas.isRefreshing
+            _ = model.quotas.lastUpdated
+            _ = model.appearance.preference
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.refreshStatusItem()
+                self.applyWindowAppearances()
+                self.observeModel()
+            }
+        }
+    }
+
+    private func applyWindowAppearances() {
+        let appearance = model.appearance.preference.nsAppearance
+        menuPanel?.appearance = appearance
+        guideWindow?.appearance = appearance
+    }
+
+    private func refreshStatusItem() {
+        guard let button = statusItem.button else { return }
+        let summary = QuotaMenuBarSummary.display(for: model.quotas.bars)
+        button.toolTip = QuotaMenuBarSummary.tooltip(for: model.quotas.bars)
+        button.setAccessibilityLabel("Grok and Cursor usage, \(summary.label) \(summary.value)")
+        let appearance = button.effectiveAppearance
+        let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let key = StatusImageCacheKey(label: summary.label, value: summary.value, fraction: summary.fraction, isDark: isDark)
+        if cachedStatusImageKey != key || cachedStatusImage == nil {
+            cachedStatusImage = Self.makeStatusImage(summary: summary, appearance: appearance)
+            cachedStatusImageKey = key
+            button.image = cachedStatusImage
+        }
+    }
+
+    @objc
+    private func toggleMenu(_ sender: NSStatusBarButton) {
+        if menuPanel?.isVisible == true {
+            closeMenu()
+            return
+        }
+        showMenu(relativeTo: statusItem.button ?? sender)
+    }
+
+    private func showMenu(relativeTo button: NSStatusBarButton) {
+        closeMenu()
+        let rootView = UsageMenuView(
+            quotas: model.quotas,
+            launchAtLogin: model.launchAtLogin,
+            appearance: model.appearance,
+            notifier: model.notifier,
+            onShowGuide: { [weak self] in
+                self?.closeMenu()
+                self?.showGuide()
+            }
+        )
+        let hosting = NSHostingController(rootView: rootView)
+        hosting.sizingOptions = [.intrinsicContentSize]
+        let fitted = hosting.sizeThatFits(in: NSSize(width: MenuLayout.width, height: 10_000))
+        let size = NSSize(width: MenuLayout.width, height: max(320, ceil(fitted.height)))
+
+        let panel = KeyableMenuPanel(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        panel.isFloatingPanel = true
+        panel.level = .statusBar
+        panel.collectionBehavior = [.transient, .moveToActiveSpace, .fullScreenAuxiliary]
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.hidesOnDeactivate = false
+        panel.becomesKeyOnlyIfNeeded = false
+        panel.appearance = model.appearance.preference.nsAppearance
+        panel.contentViewController = hosting
+        panel.setContentSize(size)
+        Self.applyMenuShellMask(to: panel)
+        positionMenu(panel, relativeTo: button)
+        panel.makeKeyAndOrderFront(nil)
+        panel.invalidateShadow()
+        NSApp.activate()
+        menuPanel = panel
+        installClickOutsideMonitor()
+    }
+
+    private static func applyMenuShellMask(to panel: NSPanel) {
+        guard let content = panel.contentView else { return }
+        content.wantsLayer = true
+        content.layer?.cornerRadius = LiquidGlass.menuShellCorner
+        content.layer?.cornerCurve = .continuous
+        content.layer?.masksToBounds = true
+        content.layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    private func positionMenu(_ panel: NSPanel, relativeTo button: NSStatusBarButton) {
+        guard let buttonWindow = button.window else { return }
+        button.layoutSubtreeIfNeeded()
+        let buttonRectOnScreen = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+        let size = panel.frame.size
+        var origin = NSPoint(
+            x: buttonRectOnScreen.midX - size.width / 2,
+            y: buttonRectOnScreen.minY - size.height - 5
+        )
+        if let screen = buttonWindow.screen ?? NSScreen.main {
+            let visible = screen.visibleFrame
+            origin.x = min(max(origin.x, visible.minX + 8), visible.maxX - size.width - 8)
+            if origin.y < visible.minY + 8 {
+                origin.y = buttonRectOnScreen.maxY + 5
+            }
+            origin.y = min(origin.y, visible.maxY - size.height - 8)
+        }
+        panel.setFrameOrigin(origin)
+    }
+
+    private func closeMenu() {
+        removeClickOutsideMonitor()
+        menuPanel?.orderOut(nil)
+        menuPanel = nil
+    }
+
+    private func installClickOutsideMonitor() {
+        removeClickOutsideMonitor()
+        let handler: (NSEvent) -> Void = { [weak self] event in
+            guard let self else { return }
+            self.handlePotentialOutsideClick(event)
+        }
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
+            handler(event)
+            return event
+        }
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown], handler: handler)
+    }
+
+    private func handlePotentialOutsideClick(_ event: NSEvent) {
+        guard let panel = menuPanel, panel.isVisible else { return }
+        let screenPoint: NSPoint
+        if let eventWindow = event.window {
+            screenPoint = eventWindow.convertToScreen(NSRect(origin: event.locationInWindow, size: .zero)).origin
+        } else {
+            screenPoint = NSEvent.mouseLocation
+        }
+        if panel.frame.contains(screenPoint) { return }
+        if let button = statusItem.button, let buttonWindow = button.window {
+            let buttonScreenRect = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+            if buttonScreenRect.contains(screenPoint) { return }
+        }
+        closeMenu()
+    }
+
+    private func removeClickOutsideMonitor() {
+        if let localMouseMonitor {
+            NSEvent.removeMonitor(localMouseMonitor)
+            self.localMouseMonitor = nil
+        }
+        if let globalMouseMonitor {
+            NSEvent.removeMonitor(globalMouseMonitor)
+            self.globalMouseMonitor = nil
+        }
+    }
+
+    private func showGuide() {
+        if let guideWindow, guideWindow.isVisible {
+            guideWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            return
+        }
+        let hosting = NSHostingController(
+            rootView: GuideView(appearance: model.appearance) { [weak self] in
+                self?.guideWindow?.close()
+            }
+        )
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 560),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Grok & Cursor Usage"
+        window.isReleasedWhenClosed = false
+        window.contentViewController = hosting
+        LiquidGlass.applyChrome(to: window, appearance: model.appearance.preference.nsAppearance)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        guideWindow = window
+    }
+
+    private static let statusValueFontSize: CGFloat = 10.5
+    private static let statusLabelFontSize: CGFloat = 7.5
+    private static let statusImageHeight: CGFloat = 22
+
+    private static func makeStatusImage(summary: QuotaMenuBarSummary.Display, appearance: NSAppearance) -> NSImage {
+        let labelFont = NSFont.systemFont(ofSize: statusLabelFontSize, weight: .bold)
+        let valueFont = NSFont.monospacedDigitSystemFont(ofSize: statusValueFontSize, weight: .bold)
+        let label = summary.label as NSString
+        let value = summary.value as NSString
+        let labelSize = label.size(withAttributes: [.font: labelFont, .kern: 0.2])
+        let valueSize = value.size(withAttributes: [.font: valueFont])
+        let bottomMargin: CGFloat = 1.5
+        let bandGap: CGFloat = 4
+        let dotDiameter: CGFloat = 6
+        let dotGap: CGFloat = 3.5
+        let width = ceil(max(valueSize.width, labelSize.width + dotGap + dotDiameter))
+        let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let glyphColor: NSColor = isDark ? .white : .black
+        let image = NSImage(size: NSSize(width: width, height: statusImageHeight), flipped: false) { _ in
+            let valueBaseline = bottomMargin
+            let labelBaseline = valueBaseline + valueFont.capHeight + bandGap
+            value.draw(
+                at: NSPoint(x: 0, y: valueBaseline + valueFont.descender),
+                withAttributes: [.font: valueFont, .foregroundColor: glyphColor]
+            )
+            label.draw(
+                at: NSPoint(x: 0, y: labelBaseline + labelFont.descender),
+                withAttributes: [.font: labelFont, .foregroundColor: glyphColor, .kern: 0.2]
+            )
+            let dotRect = NSRect(
+                x: labelSize.width + dotGap,
+                y: labelBaseline + (labelFont.capHeight - dotDiameter) / 2,
+                width: dotDiameter,
+                height: dotDiameter
+            )
+            dotColor(for: summary.fraction, isDark: isDark).setFill()
+            NSBezierPath(ovalIn: dotRect).fill()
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    private static func dotColor(for fraction: Double?, isDark: Bool) -> NSColor {
+        guard let fraction else {
+            return isDark ? .secondaryLabelColor : NSColor(calibratedWhite: 0.35, alpha: 1)
+        }
+        let percent = fraction * 100
+        if percent < 40 { return .systemGreen }
+        if percent < 80 { return .systemOrange }
+        return .systemRed
+    }
+}
+
+private struct StatusImageCacheKey: Equatable {
+    var label: String
+    var value: String
+    var fraction: Double?
+    var isDark: Bool
+}
+
+private final class KeyableMenuPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}

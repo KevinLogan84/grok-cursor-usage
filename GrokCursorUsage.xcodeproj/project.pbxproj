@@ -1,0 +1,617 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B00000000000000000000015 /* GrokCursorUsageApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000016 /* GrokCursorUsageApp.swift */; };
+		B00000000000000000000017 /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000018 /* StatusBarController.swift */; };
+		B00000000000000000000019 /* ChicagoDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001A /* ChicagoDay.swift */; };
+		B0000000000000000000001B /* GrokAppSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001C /* GrokAppSession.swift */; };
+		B0000000000000000000001D /* LaunchAtLoginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001E /* LaunchAtLoginManager.swift */; };
+		B0000000000000000000001F /* QuotaAlertNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000020 /* QuotaAlertNotifier.swift */; };
+		B00000000000000000000021 /* QuotaClients.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000022 /* QuotaClients.swift */; };
+		B00000000000000000000023 /* QuotaMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000024 /* QuotaMonitor.swift */; };
+		B00000000000000000000025 /* QuotaSnapshotPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000026 /* QuotaSnapshotPublisher.swift */; };
+		B00000000000000000000027 /* LiquidGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000028 /* LiquidGlass.swift */; };
+		B00000000000000000000029 /* GuideView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000002A /* GuideView.swift */; };
+		B0000000000000000000002B /* UsageMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000002C /* UsageMenuView.swift */; };
+		B0000000000000000000002D /* AppearancePreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000002E /* AppearancePreference.swift */; };
+		B0000000000000000000002F /* QuotaBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000030 /* QuotaBar.swift */; };
+		B00000000000000000000031 /* QuotaSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000032 /* QuotaSnapshot.swift */; };
+		B00000000000000000000033 /* QuotaSnapshotReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000034 /* QuotaSnapshotReader.swift */; };
+		B00000000000000000000035 /* QuotaSnapshotRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000036 /* QuotaSnapshotRefresh.swift */; };
+		B00000000000000000000037 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000038 /* Assets.xcassets */; };
+		B00000000000000000000039 /* GrokCursorUsageIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003A /* GrokCursorUsageIOSApp.swift */; };
+		B0000000000000000000003B /* IOSGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003C /* IOSGlass.swift */; };
+		B0000000000000000000003D /* PhoneScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003E /* PhoneScreen.swift */; };
+		B0000000000000000000003F /* AppearancePreference.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000002E /* AppearancePreference.swift */; };
+		B00000000000000000000040 /* QuotaBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000030 /* QuotaBar.swift */; };
+		B00000000000000000000041 /* QuotaSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000032 /* QuotaSnapshot.swift */; };
+		B00000000000000000000042 /* QuotaSnapshotReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000034 /* QuotaSnapshotReader.swift */; };
+		B00000000000000000000043 /* QuotaSnapshotRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000036 /* QuotaSnapshotRefresh.swift */; };
+		B00000000000000000000044 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000045 /* Assets.xcassets */; };
+		B00000000000000000000046 /* QuotaTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000047 /* QuotaTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B00000000000000000000008 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B00000000000000000000004 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B00000000000000000000001;
+			remoteInfo = GrokCursorUsage;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		B00000000000000000000005 /* Grok & Cursor Usage.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Grok & Cursor Usage.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B00000000000000000000006 /* Grok & Cursor Usage.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Grok & Cursor Usage.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		B00000000000000000000007 /* GrokCursorUsageTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GrokCursorUsageTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B00000000000000000000016 /* GrokCursorUsageApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokCursorUsageApp.swift; sourceTree = "<group>"; };
+		B00000000000000000000018 /* StatusBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
+		B0000000000000000000001A /* ChicagoDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChicagoDay.swift; sourceTree = "<group>"; };
+		B0000000000000000000001C /* GrokAppSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokAppSession.swift; sourceTree = "<group>"; };
+		B0000000000000000000001E /* LaunchAtLoginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginManager.swift; sourceTree = "<group>"; };
+		B00000000000000000000020 /* QuotaAlertNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaAlertNotifier.swift; sourceTree = "<group>"; };
+		B00000000000000000000022 /* QuotaClients.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaClients.swift; sourceTree = "<group>"; };
+		B00000000000000000000024 /* QuotaMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaMonitor.swift; sourceTree = "<group>"; };
+		B00000000000000000000026 /* QuotaSnapshotPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaSnapshotPublisher.swift; sourceTree = "<group>"; };
+		B00000000000000000000028 /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
+		B0000000000000000000002A /* GuideView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideView.swift; sourceTree = "<group>"; };
+		B0000000000000000000002C /* UsageMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageMenuView.swift; sourceTree = "<group>"; };
+		B0000000000000000000002E /* AppearancePreference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearancePreference.swift; sourceTree = "<group>"; };
+		B00000000000000000000030 /* QuotaBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaBar.swift; sourceTree = "<group>"; };
+		B00000000000000000000032 /* QuotaSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaSnapshot.swift; sourceTree = "<group>"; };
+		B00000000000000000000034 /* QuotaSnapshotReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaSnapshotReader.swift; sourceTree = "<group>"; };
+		B00000000000000000000036 /* QuotaSnapshotRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaSnapshotRefresh.swift; sourceTree = "<group>"; };
+		B00000000000000000000038 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B0000000000000000000003A /* GrokCursorUsageIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokCursorUsageIOSApp.swift; sourceTree = "<group>"; };
+		B0000000000000000000003C /* IOSGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSGlass.swift; sourceTree = "<group>"; };
+		B0000000000000000000003E /* PhoneScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneScreen.swift; sourceTree = "<group>"; };
+		B00000000000000000000045 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B00000000000000000000047 /* QuotaTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaTests.swift; sourceTree = "<group>"; };
+		B00000000000000000000048 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B00000000000000000000049 /* GrokCursorUsage.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GrokCursorUsage.entitlements; sourceTree = "<group>"; };
+		B0000000000000000000004A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B0000000000000000000004B /* GrokCursorUsageIOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GrokCursorUsageIOS.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B0000000000000000000000B /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0000000000000000000000E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B00000000000000000000011 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		B0000000000000000000004C /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				B0000000000000000000001A /* ChicagoDay.swift */,
+				B0000000000000000000001C /* GrokAppSession.swift */,
+				B0000000000000000000001E /* LaunchAtLoginManager.swift */,
+				B00000000000000000000020 /* QuotaAlertNotifier.swift */,
+				B00000000000000000000022 /* QuotaClients.swift */,
+				B00000000000000000000024 /* QuotaMonitor.swift */,
+				B00000000000000000000026 /* QuotaSnapshotPublisher.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		B0000000000000000000004D /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000028 /* LiquidGlass.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		B0000000000000000000004E /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				B0000000000000000000002A /* GuideView.swift */,
+				B0000000000000000000002C /* UsageMenuView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		B0000000000000000000004F /* GrokCursorUsage */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000016 /* GrokCursorUsageApp.swift */,
+				B00000000000000000000018 /* StatusBarController.swift */,
+				B00000000000000000000048 /* Info.plist */,
+				B00000000000000000000049 /* GrokCursorUsage.entitlements */,
+				B00000000000000000000038 /* Assets.xcassets */,
+				B0000000000000000000004C /* Services */,
+				B0000000000000000000004D /* Utilities */,
+				B0000000000000000000004E /* Views */,
+			);
+			path = GrokCursorUsage;
+			sourceTree = "<group>";
+		};
+		B00000000000000000000050 /* GrokCursorUsageIOS */ = {
+			isa = PBXGroup;
+			children = (
+				B0000000000000000000003A /* GrokCursorUsageIOSApp.swift */,
+				B0000000000000000000003C /* IOSGlass.swift */,
+				B0000000000000000000003E /* PhoneScreen.swift */,
+				B0000000000000000000004A /* Info.plist */,
+				B0000000000000000000004B /* GrokCursorUsageIOS.entitlements */,
+				B00000000000000000000045 /* Assets.xcassets */,
+			);
+			path = GrokCursorUsageIOS;
+			sourceTree = "<group>";
+		};
+		B00000000000000000000051 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				B0000000000000000000002E /* AppearancePreference.swift */,
+				B00000000000000000000030 /* QuotaBar.swift */,
+				B00000000000000000000032 /* QuotaSnapshot.swift */,
+				B00000000000000000000034 /* QuotaSnapshotReader.swift */,
+				B00000000000000000000036 /* QuotaSnapshotRefresh.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		B00000000000000000000052 /* GrokCursorUsageTests */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000047 /* QuotaTests.swift */,
+			);
+			path = GrokCursorUsageTests;
+			sourceTree = "<group>";
+		};
+		B00000000000000000000014 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B00000000000000000000005 /* Grok & Cursor Usage.app */,
+				B00000000000000000000006 /* Grok & Cursor Usage.app */,
+				B00000000000000000000007 /* GrokCursorUsageTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B00000000000000000000013 /* GrokCursorUsage */ = {
+			isa = PBXGroup;
+			children = (
+				B0000000000000000000004F /* GrokCursorUsage */,
+				B00000000000000000000050 /* GrokCursorUsageIOS */,
+				B00000000000000000000051 /* Shared */,
+				B00000000000000000000052 /* GrokCursorUsageTests */,
+				B00000000000000000000014 /* Products */,
+			);
+			name = GrokCursorUsage;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B00000000000000000000001 /* GrokCursorUsage */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B0000000000000000000005C /* Build configuration list for PBXNativeTarget "GrokCursorUsage" */;
+			buildPhases = (
+				B0000000000000000000000A /* Sources */,
+				B0000000000000000000000B /* Frameworks */,
+				B0000000000000000000000C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GrokCursorUsage;
+			productName = "Grok & Cursor Usage";
+			productReference = B00000000000000000000005 /* Grok & Cursor Usage.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B00000000000000000000002 /* GrokCursorUsageIOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B0000000000000000000005D /* Build configuration list for PBXNativeTarget "GrokCursorUsageIOS" */;
+			buildPhases = (
+				B0000000000000000000000D /* Sources */,
+				B0000000000000000000000E /* Frameworks */,
+				B0000000000000000000000F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GrokCursorUsageIOS;
+			productName = "Grok & Cursor Usage";
+			productReference = B00000000000000000000006 /* Grok & Cursor Usage.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B00000000000000000000003 /* GrokCursorUsageTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B0000000000000000000005E /* Build configuration list for PBXNativeTarget "GrokCursorUsageTests" */;
+			buildPhases = (
+				B00000000000000000000010 /* Sources */,
+				B00000000000000000000011 /* Frameworks */,
+				B00000000000000000000012 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B00000000000000000000009 /* PBXTargetDependency */,
+			);
+			name = GrokCursorUsageTests;
+			productName = GrokCursorUsageTests;
+			productReference = B00000000000000000000007 /* GrokCursorUsageTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B00000000000000000000004 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					B00000000000000000000001 = { CreatedOnToolsVersion = 16.0; };
+					B00000000000000000000002 = { CreatedOnToolsVersion = 16.0; };
+					B00000000000000000000003 = { CreatedOnToolsVersion = 16.0; TestTargetID = B00000000000000000000001; };
+				};
+			};
+			buildConfigurationList = B0000000000000000000005B /* Build configuration list for PBXProject "GrokCursorUsage" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = B00000000000000000000013;
+			productRefGroup = B00000000000000000000014 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B00000000000000000000001 /* GrokCursorUsage */,
+				B00000000000000000000002 /* GrokCursorUsageIOS */,
+				B00000000000000000000003 /* GrokCursorUsageTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B0000000000000000000000C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000037 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0000000000000000000000F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000044 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B00000000000000000000012 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B0000000000000000000000A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000015,
+				B00000000000000000000017,
+				B00000000000000000000019,
+				B0000000000000000000001B,
+				B0000000000000000000001D,
+				B0000000000000000000001F,
+				B00000000000000000000021,
+				B00000000000000000000023,
+				B00000000000000000000025,
+				B00000000000000000000027,
+				B00000000000000000000029,
+				B0000000000000000000002B,
+				B0000000000000000000002D,
+				B0000000000000000000002F,
+				B00000000000000000000031,
+				B00000000000000000000033,
+				B00000000000000000000035,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0000000000000000000000D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000039,
+				B0000000000000000000003B,
+				B0000000000000000000003D,
+				B0000000000000000000003F,
+				B00000000000000000000040,
+				B00000000000000000000041,
+				B00000000000000000000042,
+				B00000000000000000000043,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B00000000000000000000010 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000046,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B00000000000000000000009 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B00000000000000000000001 /* GrokCursorUsage */;
+			targetProxy = B00000000000000000000008 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		B00000000000000000000053 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		B00000000000000000000054 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		B00000000000000000000055 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = GrokCursorUsage/GrokCursorUsage.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KVVL57G45T;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GrokCursorUsage/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.app;
+				PRODUCT_MODULE_NAME = GrokCursorUsage;
+				PRODUCT_NAME = "Grok & Cursor Usage";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		B00000000000000000000056 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = GrokCursorUsage/GrokCursorUsage.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KVVL57G45T;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GrokCursorUsage/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.app;
+				PRODUCT_MODULE_NAME = GrokCursorUsage;
+				PRODUCT_NAME = "Grok & Cursor Usage";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		B00000000000000000000057 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = GrokCursorUsageIOS/GrokCursorUsageIOS.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KVVL57G45T;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GrokCursorUsageIOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.ios;
+				PRODUCT_MODULE_NAME = GrokCursorUsageIOS;
+				PRODUCT_NAME = "Grok & Cursor Usage";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		B00000000000000000000058 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = GrokCursorUsageIOS/GrokCursorUsageIOS.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KVVL57G45T;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = GrokCursorUsageIOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.ios;
+				PRODUCT_MODULE_NAME = GrokCursorUsageIOS;
+				PRODUCT_NAME = "Grok & Cursor Usage";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		B00000000000000000000059 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KVVL57G45T;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Grok & Cursor Usage.app/Contents/MacOS/Grok & Cursor Usage";
+			};
+			name = Debug;
+		};
+		B0000000000000000000005A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = KVVL57G45T;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Grok & Cursor Usage.app/Contents/MacOS/Grok & Cursor Usage";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B0000000000000000000005B /* Build configuration list for PBXProject "GrokCursorUsage" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000000000000000000053 /* Debug */,
+				B00000000000000000000054 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B0000000000000000000005C /* Build configuration list for PBXNativeTarget "GrokCursorUsage" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000000000000000000055 /* Debug */,
+				B00000000000000000000056 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B0000000000000000000005D /* Build configuration list for PBXNativeTarget "GrokCursorUsageIOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000000000000000000057 /* Debug */,
+				B00000000000000000000058 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B0000000000000000000005E /* Build configuration list for PBXNativeTarget "GrokCursorUsageTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B00000000000000000000059 /* Debug */,
+				B0000000000000000000005A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = B00000000000000000000004 /* Project object */;
+}
