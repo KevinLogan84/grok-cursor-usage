@@ -13,47 +13,29 @@ A macOS menu bar app that shows how much of your Cursor and Grok plan you have u
 
 Changes are recorded in the [changelog](CHANGELOG.md).
 
-There is no downloadable build. Clone this repo and run it from Xcode.
+## Install
+
+The Mac app is a Developer ID–signed, Apple-notarized download on [GitHub Releases](https://github.com/KevinLogan84/grok-cursor-usage/releases/latest).
+
+1. Download [Grok-Cursor-Usage-macOS.zip](https://github.com/KevinLogan84/grok-cursor-usage/releases/latest/download/Grok-Cursor-Usage-macOS.zip).
+2. Unzip it.
+3. Drag **Grok & Cursor Usage.app** to `/Applications`.
+4. Open it. macOS does not show a Gatekeeper warning, because the app is notarized.
+5. Look in the menu bar for a two-line item such as `CUR` / `11%`. There is no Dock icon. Click it to open the menu.
+6. Turn on **Open at Login** in the menu’s **Settings** tab.
+
+The iPhone viewer is not in the zip. It is still [build from source](#build-from-source) only.
 
 ## Requirements
 
 - macOS 14 or later
-- [Xcode](https://apps.apple.com/app/xcode/id497799835) from the Mac App Store
-- An Apple ID added in Xcode (**Xcode → Settings → Accounts**)
 - Cursor, the grok CLI, or both signed in on the same Mac (Grok.app is optional)
 
-A free Apple ID can run the menu bar app on your own Mac. The iPhone app needs a paid [Apple Developer Program](https://developer.apple.com/programs/) membership, because it uses iCloud.
+## Keep it running
 
-## Build and run
+Leave **Grok & Cursor Usage.app** in `/Applications` and turn on **Open at Login** in **Settings**. The menu bar item stays up while the app is running. There is no Dock icon. Login items need the copy in `/Applications`.
 
-1. Clone the repo and open `GrokCursorUsage.xcodeproj`.
-
-   ```bash
-   git clone https://github.com/KevinLogan84/grok-cursor-usage.git
-   cd grok-cursor-usage
-   open GrokCursorUsage.xcodeproj
-   ```
-
-2. Select the **GrokCursorUsage** scheme.
-3. Select the **GrokCursorUsage** target, then **Signing & Capabilities**.
-4. Set **Team** to your Apple ID. The project is checked in with the author’s team (`KVVL57G45T`), which is not on your Mac.
-5. If Xcode says the bundle ID `com.grokcursorusage.app` is unavailable, change it to one your team owns, such as `com.yourname.grokcursorusage`.
-6. Press ⌘R.
-7. Look in the menu bar for a two-line item such as `CUR` / `11%`. There is no Dock icon. Click it to open the menu.
-
-### Free Apple ID (Personal Team)
-
-A Personal Team cannot sign iCloud, and the container in this repo belongs to the author. For the menu bar app alone, remove these three keys from `GrokCursorUsage/GrokCursorUsage.entitlements`:
-
-- `com.apple.developer.icloud-container-identifiers`
-- `com.apple.developer.icloud-services`
-- `com.apple.developer.ubiquity-kvstore-identifier`
-
-Everything on the Mac still works. Skip the iPhone target.
-
-### Keep it running
-
-To keep the app after you close Xcode, choose **Product → Show Build Folder in Finder**, copy `Build/Products/Debug/Grok & Cursor Usage.app` into `/Applications`, and open that copy. Then turn on **Open at Login** in the menu’s **Settings** tab. Login items need the copy in `/Applications`.
+To update, quit the app, download the new [release](https://github.com/KevinLogan84/grok-cursor-usage/releases/latest), and replace **Grok & Cursor Usage.app** in `/Applications`.
 
 ## Sign-ins it uses
 
@@ -90,9 +72,7 @@ The `GROK_HOME` and `GROK_AUTH_JSON` environment variables are honored, but an a
 
 **Grok says to update the CLI.** xAI rejected the grok CLI version. Run `grok update` in Terminal, then click **Refresh**.
 
-**A bar went blank after it used to work.** Cursor and xAI do not publish these usage endpoints, so a change on their side can break a bar. Pull the latest code, or [open an issue](https://github.com/KevinLogan84/grok-cursor-usage/issues).
-
-**Xcode signing errors.** Make sure **Team** is set on the target you are building and the bundle ID is one your team owns. On a free Apple ID, remove the iCloud keys listed above.
+**A bar went blank after it used to work.** Cursor and xAI do not publish these usage endpoints, so a change on their side can break a bar. Quit the app, download the latest [release](https://github.com/KevinLogan84/grok-cursor-usage/releases/latest), and replace **Grok & Cursor Usage.app** in `/Applications`. If you built from source, pull the latest code and run it again. You can also [open an issue](https://github.com/KevinLogan84/grok-cursor-usage/issues).
 
 ## Privacy
 
@@ -103,6 +83,8 @@ The project runs no server and includes no analytics or tracking.
 - **What it stores:** Settings and alert state in the app’s preferences. If iCloud is enabled, the latest usage numbers go to your own iCloud key-value store for the iPhone viewer. Sign-in tokens are never written to iCloud.
 
 ## iPhone viewer (optional)
+
+The iPhone viewer is not in the Mac download. Build it from source.
 
 The **GrokCursorUsageIOS** target is read-only. It never signs in to Cursor or Grok. It shows the last snapshot the Mac app wrote to your iCloud.
 
@@ -119,6 +101,46 @@ Building it takes a paid Apple Developer Program membership, your own bundle IDs
 6. On each App ID, enable **iCloud** with Key-value storage and the container from step 2.
 7. Select the **GrokCursorUsageIOS** scheme, choose your iPhone, and press ⌘R. The iPhone target requires iOS 26.
 8. Run the Mac app once so it publishes, then open the iPhone app. **Refresh** asks iCloud for a newer snapshot.
+
+## Build from source
+
+Contributors can run the app from Xcode instead of the release zip.
+
+- [Xcode](https://apps.apple.com/app/xcode/id497799835) from the Mac App Store
+- An Apple ID added in Xcode (**Xcode → Settings → Accounts**)
+
+A free Apple ID can run the menu bar app on your own Mac. The iPhone app needs a paid [Apple Developer Program](https://developer.apple.com/programs/) membership, because it uses iCloud.
+
+1. Clone the repo and open `GrokCursorUsage.xcodeproj`.
+
+   ```bash
+   git clone https://github.com/KevinLogan84/grok-cursor-usage.git
+   cd grok-cursor-usage
+   open GrokCursorUsage.xcodeproj
+   ```
+
+2. Select the **GrokCursorUsage** scheme.
+3. Select the **GrokCursorUsage** target, then **Signing & Capabilities**.
+4. Set **Team** to your Apple ID. The project is checked in with the author’s team (`KVVL57G45T`), which is not on your Mac.
+5. If Xcode says the bundle ID `com.grokcursorusage.app` is unavailable, change it to one your team owns, such as `com.yourname.grokcursorusage`.
+6. Press ⌘R.
+7. Look in the menu bar for a two-line item such as `CUR` / `11%`. There is no Dock icon. Click it to open the menu.
+
+### Free Apple ID (Personal Team)
+
+A Personal Team cannot sign iCloud, and the container in this repo belongs to the author. For the menu bar app alone, remove these three keys from `GrokCursorUsage/GrokCursorUsage.entitlements`:
+
+- `com.apple.developer.icloud-container-identifiers`
+- `com.apple.developer.icloud-services`
+- `com.apple.developer.ubiquity-kvstore-identifier`
+
+Everything on the Mac still works. Skip the iPhone target.
+
+### Keep a source build running
+
+To keep the app after you close Xcode, choose **Product → Show Build Folder in Finder**, copy `Build/Products/Debug/Grok & Cursor Usage.app` into `/Applications`, and open that copy. Then turn on **Open at Login** in the menu’s **Settings** tab. Login items need the copy in `/Applications`, not a build still sitting in DerivedData.
+
+**Xcode signing errors.** Make sure **Team** is set on the target you are building and the bundle ID is one your team owns. On a free Apple ID, remove the iCloud keys listed above.
 
 ## Tests
 
