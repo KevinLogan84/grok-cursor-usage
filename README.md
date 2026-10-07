@@ -7,7 +7,7 @@ A macOS menu bar app that shows how much of your Cursor and Grok plan you have u
 - **Menu bar at a glance.** Shows the pool you used most recently and its percent, such as `CUR` / `11%`. It switches when a different pool moves.
 - **Every pool in one menu.** Cursor Auto, Cursor API, Grok, and Grok Bot. When a service reports your plan name, such as Cursor Pro or SuperGrok, that becomes the title. Pools your account does not have are left off.
 - **Pace.** Each bar says whether you are over, under, or on pace for its billing period, and when it resets.
-- **Spike Alerts.** An optional notification when a pool climbs 15 points in one day.
+- **Spike Alerts.** An optional notification when a pool climbs during the day. Choose once or at every step, and set the step from 5% to 50%.
 - **Settings.** Text size from 75% to 125%, System, Light, or Dark appearance, and Open at Login.
 - **No account of its own.** It uses the Cursor and Grok sign-ins already on your Mac.
 
@@ -72,7 +72,7 @@ The `GROK_HOME` and `GROK_AUTH_JSON` environment variables are honored, but an a
 - Usage reloads at launch, every minute, and when you click **Refresh**.
 - The **Usage** tab lists every pool with its reset date. If a pool cannot be read, its row says what to do next.
 - Pace compares percent used with how much of that pool’s period has passed.
-- **Spike Alerts** posts at most once per pool per day, when that pool climbs 15 points from its first reading that day. The day follows your Mac’s time zone. macOS asks for notification permission when you turn it on. If you declined, the **Settings** tab shows **Open Notification Settings**.
+- **Spike Alerts** watches each pool against its first reading today. **Once** notifies a single time when a pool climbs by the amount you set. **Every** notifies again at each further step. The amount moves in steps of 5%, from 5% to 50%, and starts at 15%. The day follows your Mac’s time zone. macOS asks for notification permission when you turn it on. If you declined, the **Settings** tab shows **Open Notification Settings**.
 - The **Settings** tab holds Text Size, Appearance, Grok Sign-In, Open at Login, Spike Alerts, and the in-app **Guide**.
 - **Quit** is in the menu header.
 

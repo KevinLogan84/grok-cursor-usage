@@ -794,41 +794,72 @@ enum QuotaUnavailableCopy {
     }
 }
 
+/// How often a pool can post a spike alert during one local day.
+enum SpikeAlertRepeat: String, CaseIterable, Identifiable, Sendable {
+    case once
+    case every
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .once: "Once"
+        case .every: "Every"
+        }
+    }
+}
+
 enum QuotaBurnEvaluator {
-    static let dailyFractionThreshold = 0.15
+    static let defaultPercent = 15
+    static let minimumPercent = 5
+    static let maximumPercent = 50
+    static let percentStep = 5
 
     struct Decision: Equatable {
         var shouldNotify: Bool
         var startUsed: Double
-        var notified: Bool
+        /// How many steps of `stepPercent` have already been announced today.
+        var notifiedSteps: Int
     }
 
-    /// Whole-percent form of `dailyFractionThreshold` for notification and settings copy.
-    static var dailyPercentText: String {
-        "\(Int((dailyFractionThreshold * 100).rounded()))%"
+    static func clampPercent(_ percent: Int) -> Int {
+        let snapped = Int((Double(percent) / Double(percentStep)).rounded()) * percentStep
+        return min(maximumPercent, max(minimumPercent, snapped))
     }
 
-    /// First sample of a local calendar day becomes the baseline. Notify once if used
-    /// climbs by 15 percentage points after that. `usedFraction` is the raw
+    /// First sample of a local calendar day becomes the baseline. `usedFraction` is the raw
     /// provider value (1.2 = 120%), not the capped bar fill, so overage still counts.
+    /// Once notifies a single time when the climb reaches one step. Every notifies again
+    /// at each further step.
     static func evaluate(
         dayKey: String,
         usedFraction: Double,
         storedDayKey: String?,
         storedStartUsed: Double?,
-        alreadyNotified: Bool
+        notifiedSteps: Int,
+        mode: SpikeAlertRepeat = .once,
+        stepPercent: Int = defaultPercent
     ) -> Decision {
         let used = max(0, usedFraction)
         guard storedDayKey == dayKey, let start = storedStartUsed else {
-            return Decision(shouldNotify: false, startUsed: used, notified: false)
+            return Decision(shouldNotify: false, startUsed: used, notifiedSteps: 0)
         }
-        let burned = used - start
-        if alreadyNotified {
-            return Decision(shouldNotify: false, startUsed: start, notified: true)
+        let step = Double(clampPercent(stepPercent)) / 100
+        let reached = max(0, Int(((used - start) / step + 0.000_001).rounded(.down)))
+        switch mode {
+        case .once:
+            if notifiedSteps > 0 {
+                return Decision(shouldNotify: false, startUsed: start, notifiedSteps: notifiedSteps)
+            }
+            if reached >= 1 {
+                return Decision(shouldNotify: true, startUsed: start, notifiedSteps: 1)
+            }
+            return Decision(shouldNotify: false, startUsed: start, notifiedSteps: 0)
+        case .every:
+            if reached > notifiedSteps {
+                return Decision(shouldNotify: true, startUsed: start, notifiedSteps: reached)
+            }
+            return Decision(shouldNotify: false, startUsed: start, notifiedSteps: notifiedSteps)
         }
-        if burned >= dailyFractionThreshold - 0.000_001 {
-            return Decision(shouldNotify: true, startUsed: start, notified: true)
-        }
-        return Decision(shouldNotify: false, startUsed: start, notified: false)
     }
 }

@@ -37,7 +37,7 @@ struct GuideView: View {
                     section("While it is running") {
                         bullet("Refresh", "Usage reloads when you open the app, every minute, and when you click Refresh. The menu bar name follows whichever pool rose.")
                         bullet("Pace", "“Over”, “under”, and “on pace” compare percent used with how much of the billing period has elapsed.")
-                        bullet("Spike Alerts", "At most once per pool each day, a pool that climbs 15 points from its first reading that day posts a notification. “Day” follows this Mac’s time zone. Turn Spike Alerts off in Settings to skip it.")
+                        bullet("Spike Alerts", "Notifies you when a pool climbs from its first reading today. Once sends a single notification at the amount you set. Every sends another each time the pool climbs by that amount again. The amount moves in steps of 5%, from 5% to 50%, and starts at 15%. “Day” follows this Mac’s time zone. Turn Spike Alerts off in Settings to skip it.")
                         bullet("Text Size and Appearance", "Settings has a text size slider and a System, Light, or Dark choice. System follows this Mac.")
                         bullet("Open at Login", "In Settings. Turn this on after you copy the app into /Applications. In Xcode, use Product → Show Build Folder in Finder and copy Build/Products/Debug/Grok & Cursor Usage.app. Login items need that copy, not a build still sitting in DerivedData.")
                     }
