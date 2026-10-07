@@ -25,6 +25,7 @@
 		B00000000000000000000033 /* QuotaSnapshotReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000034 /* QuotaSnapshotReader.swift */; };
 		B00000000000000000000035 /* QuotaSnapshotRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000036 /* QuotaSnapshotRefresh.swift */; };
 		B00000000000000000000037 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000038 /* Assets.xcassets */; };
+		B00000000000000000000080 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000081 /* AppIcon.icon */; };
 		B00000000000000000000039 /* GrokCursorUsageIOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003A /* GrokCursorUsageIOSApp.swift */; };
 		B0000000000000000000003B /* IOSGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003C /* IOSGlass.swift */; };
 		B0000000000000000000003D /* PhoneScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000003E /* PhoneScreen.swift */; };
@@ -69,6 +70,7 @@
 		B00000000000000000000034 /* QuotaSnapshotReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaSnapshotReader.swift; sourceTree = "<group>"; };
 		B00000000000000000000036 /* QuotaSnapshotRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaSnapshotRefresh.swift; sourceTree = "<group>"; };
 		B00000000000000000000038 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B00000000000000000000081 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		B0000000000000000000003A /* GrokCursorUsageIOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokCursorUsageIOSApp.swift; sourceTree = "<group>"; };
 		B0000000000000000000003C /* IOSGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSGlass.swift; sourceTree = "<group>"; };
 		B0000000000000000000003E /* PhoneScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneScreen.swift; sourceTree = "<group>"; };
@@ -144,6 +146,7 @@
 				B00000000000000000000048 /* Info.plist */,
 				B00000000000000000000049 /* GrokCursorUsage.entitlements */,
 				B00000000000000000000038 /* Assets.xcassets */,
+				B00000000000000000000081 /* AppIcon.icon */,
 				B0000000000000000000004C /* Services */,
 				B0000000000000000000004D /* Utilities */,
 				B0000000000000000000004E /* Views */,
@@ -302,6 +305,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B00000000000000000000037 /* Assets.xcassets in Resources */,
+				B00000000000000000000080 /* AppIcon.icon in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
