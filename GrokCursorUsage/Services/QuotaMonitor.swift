@@ -281,19 +281,27 @@ final class QuotaMonitor {
             let prefix = "com.grokcursorusage.quota.\(bar.kind.rawValue)"
             let storedDay = defaults.string(forKey: "\(prefix).day")
             let storedStart = defaults.object(forKey: "\(prefix).startUsed") as? Double
-            let notified = defaults.bool(forKey: "\(prefix).notified")
+            let storedSteps = defaults.object(forKey: "\(prefix).steps") as? Int
+            let notifiedSteps = storedSteps ?? (defaults.bool(forKey: "\(prefix).notified") ? 1 : 0)
             let decision = QuotaBurnEvaluator.evaluate(
                 dayKey: dayKey,
                 usedFraction: bar.usedPercent / 100,
                 storedDayKey: storedDay,
                 storedStartUsed: storedStart,
-                alreadyNotified: notified
+                notifiedSteps: notifiedSteps,
+                mode: notifier.repeatMode,
+                stepPercent: notifier.stepPercent
             )
             defaults.set(dayKey, forKey: "\(prefix).day")
             defaults.set(decision.startUsed, forKey: "\(prefix).startUsed")
-            defaults.set(decision.notified, forKey: "\(prefix).notified")
+            defaults.set(decision.notifiedSteps, forKey: "\(prefix).steps")
+            defaults.removeObject(forKey: "\(prefix).notified")
             if decision.shouldNotify {
-                notifier.postQuotaBurn(bar: bar, dayKey: dayKey)
+                notifier.postQuotaBurn(
+                    bar: bar,
+                    dayKey: dayKey,
+                    climbedPercent: decision.notifiedSteps * notifier.stepPercent
+                )
             }
         }
     }

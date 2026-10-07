@@ -695,9 +695,83 @@ struct QuotaTests {
             usedFraction: 1.12,
             storedDayKey: "2026-09-05",
             storedStartUsed: 0.95,
-            alreadyNotified: false
+            notifiedSteps: 0
         )
         #expect(burned.shouldNotify)
+        #expect(burned.notifiedSteps == 1)
+    }
+
+    @Test
+    func spikeAlertNotifiesOnceOrAtEveryStep() {
+        let quiet = QuotaBurnEvaluator.evaluate(
+            dayKey: "2026-10-07",
+            usedFraction: 0.24,
+            storedDayKey: "2026-10-07",
+            storedStartUsed: 0.15,
+            notifiedSteps: 0,
+            mode: .once,
+            stepPercent: 15
+        )
+        #expect(!quiet.shouldNotify)
+
+        let once = QuotaBurnEvaluator.evaluate(
+            dayKey: "2026-10-07",
+            usedFraction: 0.30,
+            storedDayKey: "2026-10-07",
+            storedStartUsed: 0.15,
+            notifiedSteps: 0,
+            mode: .once,
+            stepPercent: 15
+        )
+        #expect(once.shouldNotify)
+        #expect(once.notifiedSteps == 1)
+        let again = QuotaBurnEvaluator.evaluate(
+            dayKey: "2026-10-07",
+            usedFraction: 0.50,
+            storedDayKey: "2026-10-07",
+            storedStartUsed: 0.15,
+            notifiedSteps: once.notifiedSteps,
+            mode: .once,
+            stepPercent: 15
+        )
+        #expect(!again.shouldNotify)
+
+        let first = QuotaBurnEvaluator.evaluate(
+            dayKey: "2026-10-07",
+            usedFraction: 0.30,
+            storedDayKey: "2026-10-07",
+            storedStartUsed: 0.15,
+            notifiedSteps: 0,
+            mode: .every,
+            stepPercent: 15
+        )
+        #expect(first.shouldNotify)
+        #expect(first.notifiedSteps == 1)
+        let between = QuotaBurnEvaluator.evaluate(
+            dayKey: "2026-10-07",
+            usedFraction: 0.40,
+            storedDayKey: "2026-10-07",
+            storedStartUsed: 0.15,
+            notifiedSteps: first.notifiedSteps,
+            mode: .every,
+            stepPercent: 15
+        )
+        #expect(!between.shouldNotify)
+        let second = QuotaBurnEvaluator.evaluate(
+            dayKey: "2026-10-07",
+            usedFraction: 0.45,
+            storedDayKey: "2026-10-07",
+            storedStartUsed: 0.15,
+            notifiedSteps: first.notifiedSteps,
+            mode: .every,
+            stepPercent: 15
+        )
+        #expect(second.shouldNotify)
+        #expect(second.notifiedSteps == 2)
+
+        #expect(QuotaBurnEvaluator.clampPercent(15) == 15)
+        #expect(QuotaBurnEvaluator.clampPercent(3) == 5)
+        #expect(QuotaBurnEvaluator.clampPercent(100) == 50)
     }
 
     @Test

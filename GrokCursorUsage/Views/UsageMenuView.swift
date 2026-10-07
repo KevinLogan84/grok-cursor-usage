@@ -241,17 +241,57 @@ struct UsageMenuView: View {
 
                 Toggle("Open at Login", isOn: launchAtLoginBinding)
                     .font(MenuMetrics.font(16, scale: scale))
-                VStack(alignment: .leading, spacing: MenuMetrics.points(4, scale: scale)) {
+                VStack(alignment: .leading, spacing: MenuMetrics.points(8, scale: scale)) {
                     Toggle("Spike Alerts", isOn: $notifier.alertsEnabled)
                         .font(MenuMetrics.font(16, scale: scale))
                         .onChange(of: notifier.alertsEnabled) { _, enabled in
                             guard enabled else { return }
                             Task { await notifier.requestAuthorizationIfNeeded() }
                         }
-                    Text("Notifies you, at most once per pool each day, when a pool climbs \(Int((QuotaBurnEvaluator.dailyFractionThreshold * 100).rounded())) points or more since your first reading that day.")
-                        .font(MenuMetrics.font(13, scale: scale))
-                        .foregroundStyle(LiquidGlass.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if notifier.alertsEnabled {
+                        Picker("Notify", selection: $notifier.repeatMode) {
+                            ForEach(SpikeAlertRepeat.allCases) { mode in
+                                Text(mode.title).tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .font(MenuMetrics.font(14, scale: scale))
+                        .accessibilityLabel("Notify")
+                        VStack(alignment: .leading, spacing: MenuMetrics.points(6, scale: scale)) {
+                            HStack {
+                                Text("Amount")
+                                    .font(MenuMetrics.font(16, scale: scale, weight: .semibold))
+                                    .foregroundStyle(LiquidGlass.textPrimary)
+                                Spacer()
+                                Text("\(notifier.stepPercent)%")
+                                    .font(MenuMetrics.font(14, scale: scale, weight: .semibold, monospaced: true))
+                                    .foregroundStyle(LiquidGlass.textSecondary)
+                                    .accessibilityHidden(true)
+                            }
+                            Slider(
+                                value: stepPercentBinding,
+                                in: Double(QuotaBurnEvaluator.minimumPercent)...Double(QuotaBurnEvaluator.maximumPercent),
+                                step: Double(QuotaBurnEvaluator.percentStep)
+                            ) {
+                                Text("Amount")
+                            } minimumValueLabel: {
+                                Text("\(QuotaBurnEvaluator.minimumPercent)%")
+                                    .font(MenuMetrics.font(12, scale: scale))
+                                    .foregroundStyle(LiquidGlass.textSecondary)
+                            } maximumValueLabel: {
+                                Text("\(QuotaBurnEvaluator.maximumPercent)%")
+                                    .font(MenuMetrics.font(12, scale: scale))
+                                    .foregroundStyle(LiquidGlass.textSecondary)
+                            }
+                            .labelsHidden()
+                            .accessibilityValue("\(notifier.stepPercent) percent")
+                        }
+                        Text(notifier.spikeHint)
+                            .font(MenuMetrics.font(13, scale: scale))
+                            .foregroundStyle(LiquidGlass.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 if notifier.authorization == .denied {
                     Button("Open Notification Settings") {
@@ -290,6 +330,13 @@ struct UsageMenuView: View {
 
     private var sizePercent: Int {
         Int(MenuMetrics.percent(for: scale).rounded())
+    }
+
+    private var stepPercentBinding: Binding<Double> {
+        Binding(
+            get: { Double(notifier.stepPercent) },
+            set: { notifier.stepPercent = Int($0.rounded()) }
+        )
     }
 
     private var sizePercentBinding: Binding<Double> {

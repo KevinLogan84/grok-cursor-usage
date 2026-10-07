@@ -2,11 +2,13 @@ import AppKit
 import Foundation
 @preconcurrency import UserNotifications
 
-/// Posts the once-a-day spike alert when a subscription bar climbs 15 points.
+/// Posts a spike alert when a subscription bar climbs by the amount set in Settings.
 @MainActor
 @Observable
 final class QuotaAlertNotifier {
     static let enabledKey = "com.grokcursorusage.alerts.enabled"
+    static let repeatKey = "com.grokcursorusage.alerts.repeat"
+    static let stepPercentKey = "com.grokcursorusage.alerts.stepPercent"
 
     private let defaults: UserDefaults
     private let center: UNUserNotificationCenter
@@ -18,6 +20,25 @@ final class QuotaAlertNotifier {
         didSet {
             guard alertsEnabled != oldValue else { return }
             defaults.set(alertsEnabled, forKey: Self.enabledKey)
+        }
+    }
+
+    var repeatMode: SpikeAlertRepeat {
+        didSet {
+            guard repeatMode != oldValue else { return }
+            defaults.set(repeatMode.rawValue, forKey: Self.repeatKey)
+        }
+    }
+
+    var stepPercent: Int {
+        didSet {
+            let clamped = QuotaBurnEvaluator.clampPercent(stepPercent)
+            if clamped != stepPercent {
+                stepPercent = clamped
+                return
+            }
+            guard stepPercent != oldValue else { return }
+            defaults.set(stepPercent, forKey: Self.stepPercentKey)
         }
     }
 
@@ -34,6 +55,9 @@ final class QuotaAlertNotifier {
         } else {
             alertsEnabled = defaults.bool(forKey: Self.enabledKey)
         }
+        repeatMode = defaults.string(forKey: Self.repeatKey).flatMap(SpikeAlertRepeat.init(rawValue:)) ?? .once
+        let storedPercent = defaults.object(forKey: Self.stepPercentKey) as? Int
+        stepPercent = QuotaBurnEvaluator.clampPercent(storedPercent ?? QuotaBurnEvaluator.defaultPercent)
     }
 
     func refreshAuthorizationStatus() async {
@@ -76,19 +100,29 @@ final class QuotaAlertNotifier {
         NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/System Settings.app"))
     }
 
-    func postQuotaBurn(bar: QuotaBar, dayKey: String) {
+    func postQuotaBurn(bar: QuotaBar, dayKey: String, climbedPercent: Int) {
         guard alertsEnabled else { return }
         let content = UNMutableNotificationContent()
         content.title = "\(bar.title) usage spike"
-        content.body =
-            "\(LocalDay.dayLabel(for: dayKey)): \(bar.title) used \(QuotaBurnEvaluator.dailyPercentText) or more of its allowance today (\(bar.usedText))."
+        let day = LocalDay.dayLabel(for: dayKey)
+        content.body = "\(day): \(bar.title) climbed \(climbedPercent)% since the first reading today (\(bar.usedText))."
         content.sound = .default
         let request = UNNotificationRequest(
-            identifier: "quota-burn-\(bar.kind.rawValue)-\(dayKey)",
+            identifier: "quota-burn-\(bar.kind.rawValue)-\(dayKey)-\(climbedPercent)",
             content: content,
             trigger: nil
         )
         poster.post(request)
+    }
+
+    var spikeHint: String {
+        let amount = stepPercent
+        switch repeatMode {
+        case .once:
+            return "One notification per pool when it climbs \(amount)% from the first reading today."
+        case .every:
+            return "Another notification each further \(amount)% that pool uses today."
+        }
     }
 }
 
