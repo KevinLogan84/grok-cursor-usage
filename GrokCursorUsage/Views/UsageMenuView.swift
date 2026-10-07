@@ -53,7 +53,6 @@ struct UsageMenuView: View {
         .task {
             await notifier.refreshAuthorizationStatus()
         }
-        .onAppear(perform: onLayout)
         .onChange(of: tab) { _, _ in onLayout() }
         .onChange(of: appearance.interfaceScale) { _, _ in onLayout() }
     }

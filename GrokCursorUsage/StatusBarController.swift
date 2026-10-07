@@ -57,13 +57,7 @@ final class StatusBarController {
     init(model: AppModel) {
         self.model = model
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = statusItem.button {
-            button.imagePosition = .imageOnly
-            button.setButtonType(.momentaryPushIn)
-            button.target = self
-            button.action = #selector(toggleMenu(_:))
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        }
+        configureStatusButton()
         refreshStatusItem()
         observeModel()
         updateTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
@@ -114,7 +108,17 @@ final class StatusBarController {
         guideWindow?.contentView?.appearance = appearance
     }
 
+    private func configureStatusButton() {
+        guard let button = statusItem.button else { return }
+        button.imagePosition = .imageOnly
+        button.setButtonType(.momentaryPushIn)
+        button.target = self
+        button.action = #selector(toggleMenu(_:))
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+    }
+
     private func refreshStatusItem() {
+        configureStatusButton()
         guard let button = statusItem.button else { return }
         let summary = QuotaMenuBarSummary.display(for: model.quotas.bars, activeKind: model.quotas.menuBarKind)
         button.toolTip = QuotaMenuBarSummary.tooltip(for: model.quotas.bars)
@@ -157,7 +161,7 @@ final class StatusBarController {
         hosting.sizingOptions = [.intrinsicContentSize]
         let width = MenuMetrics.width(for: model.appearance.interfaceScale)
         let fitted = hosting.sizeThatFits(in: NSSize(width: width, height: 10_000))
-        let size = NSSize(width: width, height: ceil(fitted.height))
+        let size = NSSize(width: width, height: max(200, ceil(fitted.height)))
 
         let panel = KeyableMenuPanel(
             contentRect: NSRect(origin: .zero, size: size),
@@ -167,22 +171,25 @@ final class StatusBarController {
         )
         panel.isFloatingPanel = true
         panel.level = .statusBar
-        panel.collectionBehavior = [.transient, .moveToActiveSpace, .fullScreenAuxiliary]
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
-        panel.becomesKeyOnlyIfNeeded = false
+        panel.becomesKeyOnlyIfNeeded = true
         panel.appearance = model.appearance.resolvedNSAppearance
         panel.contentViewController = hosting
         panel.setContentSize(size)
         Self.applyMenuShellMask(to: panel)
         positionMenu(panel, relativeTo: button)
-        panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
         panel.invalidateShadow()
-        NSApp.activate()
         menuPanel = panel
-        installClickOutsideMonitor()
+        // The opening click is still in flight. Wait until it finishes before
+        // watching for a click outside, or that same click closes the menu.
+        DispatchQueue.main.async { [weak self] in
+            self?.installClickOutsideMonitor()
+        }
     }
 
     private static func applyMenuShellMask(to panel: NSPanel) {
@@ -201,7 +208,8 @@ final class StatusBarController {
         else { return }
         let width = MenuMetrics.width(for: model.appearance.interfaceScale)
         let fitted = hosting.sizeThatFits(in: NSSize(width: width, height: 10_000))
-        let size = NSSize(width: width, height: max(1, ceil(fitted.height)))
+        guard fitted.height > 80 else { return }
+        let size = NSSize(width: width, height: ceil(fitted.height))
         guard abs(panel.frame.width - size.width) > 0.5 || abs(panel.frame.height - size.height) > 0.5 else { return }
         panel.setContentSize(size)
         positionMenu(panel, relativeTo: button)
