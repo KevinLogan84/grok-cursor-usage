@@ -39,17 +39,17 @@ struct GuideView: View {
                         bullet("Pace", "“Over”, “under”, and “on pace” compare percent used with how much of the billing period has elapsed.")
                         bullet("Spike Alerts", "Notifies you when a pool climbs from its first reading today. If the pool resets during the day, the count starts over from the reading after that reset. Once sends a single notification at the amount you set. Every sends another each time the pool climbs by that amount again. The amount moves in steps of 5%, from 5% to 50%, and starts at 15%. “Day” follows this Mac’s time zone. Turn Spike Alerts off in Settings to skip it.")
                         bullet("Text Size and Appearance", "Settings has a text size slider and a System, Light, or Dark choice. System follows this Mac.")
-                        bullet("Open at Login", "In Settings. Turn this on after you copy the app into /Applications. In Xcode, use Product → Show Build Folder in Finder and copy Build/Products/Debug/Grok & Cursor Usage.app. Login items need that copy, not a build still sitting in DerivedData.")
+                        bullet("Open at Login", "In Settings, after Grok & Cursor Usage.app is in /Applications. Download Grok-Cursor-Usage-macOS.zip from GitHub Releases, unzip it, and drag the app there, then open it. macOS does not show a Gatekeeper warning, because the app is notarized. Login items need that copy. A build still sitting in Xcode’s DerivedData folder will not start at login.")
                     }
                     section("On your iPhone") {
-                        Text("The iPhone app is optional. It only shows the snapshot this Mac last wrote to iCloud. It never signs in to Cursor or Grok. Building it is covered in the README: use your own Apple team, your own bundle IDs, and an iCloud container your developer account owns. The container checked into the repo belongs to the author.")
+                        Text("The iPhone app is optional, and it is not in the Mac download. Build it from source. It only shows the snapshot this Mac last wrote to iCloud. It never signs in to Cursor or Grok. Building it is covered in the README: use your own Apple team, your own bundle IDs, and an iCloud container your developer account owns. The container checked into the repo belongs to the author.")
                         bullet("Same iCloud account", "Sign the Mac and the iPhone into the same Apple ID.")
                         bullet("Same signing team", "Sign the Mac app and the GrokCursorUsageIOS scheme with your Apple team. Enable iCloud Key-value storage and your container on both App IDs.")
                         bullet("Run the Mac app", "Leave Grok & Cursor Usage running once so it can publish a snapshot.")
                         bullet("Refresh", "The phone updates when iCloud delivers a new snapshot. Refresh asks iCloud again. The iPhone target requires iOS 26.")
                     }
                     section("If a bar stays blank") {
-                        Text("The row says what to do next, such as opening Cursor, running grok login, or running grok update. A Cursor or Grok change can also blank a bar until this app is updated. Quit is in the menu header. There is no Dock icon.")
+                        Text("The row says what to do next, such as opening Cursor, running grok login, or running grok update. A Cursor or Grok change can also blank a bar until this app is updated: quit from the menu header, download the new release, and replace Grok & Cursor Usage.app in /Applications. There is no Dock icon.")
                     }
                     section("Privacy") {
                         Text("The app reads the Cursor and grok CLI sign-ins already on this Mac, plus Grok.app’s if you opt in. It never changes them, and uses them only to ask Cursor and xAI for your usage. If iCloud is enabled, the latest usage numbers, never your sign-ins, go to your own iCloud for the iPhone app. The project runs no server and includes no analytics or tracking.")
