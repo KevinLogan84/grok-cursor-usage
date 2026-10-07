@@ -218,7 +218,9 @@ final class QuotaMonitor {
             } else if grokSession {
                 included[.superGrok] = .unavailable(
                     .superGrok,
-                    message: QuotaUnavailableCopy.grokUnavailable,
+                    message: GrokSignInSource.current(defaults).usesGrokApp
+                        ? QuotaUnavailableCopy.grokUnavailable
+                        : QuotaUnavailableCopy.grokCLISignInAgain,
                     title: "Grok"
                 )
             } else {

@@ -19,6 +19,7 @@ struct UsageMenuView: View {
     @Bindable var launchAtLogin: LaunchAtLoginManager
     @Bindable var appearance: AppearancePreferenceStore
     @Bindable var notifier: QuotaAlertNotifier
+    @Bindable var grokSource: GrokSignInSourceStore
     var onShowGuide: () -> Void
     var onLayout: () -> Void = {}
 
@@ -210,6 +211,34 @@ struct UsageMenuView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                VStack(alignment: .leading, spacing: MenuMetrics.points(6, scale: scale)) {
+                    Text("Grok Sign-In")
+                        .font(MenuMetrics.font(16, scale: scale, weight: .semibold))
+                        .foregroundStyle(LiquidGlass.textPrimary)
+                    Picker("Grok Sign-In", selection: $grokSource.source) {
+                        ForEach(GrokSignInSource.allCases) { source in
+                            Text(source.title).tag(source)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .font(MenuMetrics.font(14, scale: scale))
+                    Text(grokSourceHint)
+                        .font(MenuMetrics.font(13, scale: scale))
+                        .foregroundStyle(LiquidGlass.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if grokSource.source.usesGrokApp {
+                        Button("Open Full Disk Access Settings") {
+                            Self.openFullDiskAccessSettings()
+                        }
+                        .font(MenuMetrics.font(14, scale: scale))
+                        .buttonStyle(.borderless)
+                    }
+                }
+                .onChange(of: grokSource.source) { _, _ in
+                    Task { await quotas.refresh() }
+                }
+
                 Toggle("Open at Login", isOn: launchAtLoginBinding)
                     .font(MenuMetrics.font(16, scale: scale))
                 VStack(alignment: .leading, spacing: MenuMetrics.points(4, scale: scale)) {
@@ -243,6 +272,20 @@ struct UsageMenuView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var grokSourceHint: String {
+        switch grokSource.source {
+        case .cli:
+            "Uses the grok CLI login (run grok login in Terminal). No extra permissions."
+        case .cliAndGrokApp:
+            "Falls back to Grok.app’s sign-in when the CLI has none. Needs Full Disk Access for Grok & Cursor Usage."
+        }
+    }
+
+    private static func openFullDiskAccessSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private var sizePercent: Int {

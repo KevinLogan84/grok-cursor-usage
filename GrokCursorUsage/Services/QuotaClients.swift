@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 #if canImport(Darwin)
 import Darwin
 #endif
@@ -385,6 +386,45 @@ enum GrokCLIAuth {
     }
 }
 
+/// Where Grok usage is read from. Grok.app's cookie file sits in another app's
+/// container, so it is only opened when the user opts in (it needs Full Disk Access).
+enum GrokSignInSource: String, CaseIterable, Identifiable, Sendable {
+    case cli
+    case cliAndGrokApp
+
+    static let defaultsKey = "com.grokcursorusage.grokSource"
+
+    static func current(_ defaults: UserDefaults = .standard) -> GrokSignInSource {
+        defaults.string(forKey: defaultsKey).flatMap(Self.init(rawValue:)) ?? .cli
+    }
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .cli: "grok CLI"
+        case .cliAndGrokApp: "CLI + Grok.app"
+        }
+    }
+
+    var usesGrokApp: Bool { self == .cliAndGrokApp }
+}
+
+@MainActor
+@Observable
+final class GrokSignInSourceStore {
+    var source: GrokSignInSource {
+        didSet { defaults.set(source.rawValue, forKey: GrokSignInSource.defaultsKey) }
+    }
+
+    @ObservationIgnored private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        source = GrokSignInSource.current(defaults)
+    }
+}
+
 enum GrokQuotaClient {
     /// `cli-chat-proxy` version-gates billing. This is the grok CLI release
     /// current with Grok 4.7 (`@xai-official/grok` 1.0.40).
@@ -394,14 +434,16 @@ enum GrokQuotaClient {
         GrokCLIAuth.hasSessionLogin()
     }
 
-    static func hasSignedInSession() -> Bool {
-        GrokCLIAuth.hasSessionLogin() || GrokAppSession.hasSignedInCookies()
+    static func hasSignedInSession(source: GrokSignInSource = .current()) -> Bool {
+        if GrokCLIAuth.hasSessionLogin() { return true }
+        return source.usesGrokApp && GrokAppSession.hasSignedInCookies()
     }
 
-    static func fetchBilling() async -> Data? {
+    static func fetchBilling(source: GrokSignInSource = .current()) async -> Data? {
         if let cli = await fetchCLIBilling() {
             return cli
         }
+        guard source.usesGrokApp else { return nil }
         let cookies = GrokAppSession.cookies()
         guard !cookies.isEmpty else { return nil }
         return await GrokWebBillingClient.fetchBilling(cookies: cookies)
@@ -430,7 +472,7 @@ enum GrokQuotaClient {
 
     /// A refreshed token is never written back into the CLI's `auth.json` (that file
     /// belongs to the grok CLI), so it is remembered here. Without this every
-    /// 5-minute poll after the stored token expired would hit auth.x.ai again,
+    /// poll after the stored token expired would hit auth.x.ai again,
     /// and a rotated refresh token would be lost.
     private static let refreshedTokens = RefreshedTokenCache()
 
