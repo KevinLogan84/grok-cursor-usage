@@ -1,7 +1,17 @@
 import SwiftUI
 
-enum MenuLayout {
-    static let width: CGFloat = 360
+private enum MenuTab: String, CaseIterable, Identifiable {
+    case usage
+    case settings
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .usage: "Usage"
+        case .settings: "Settings"
+        }
+    }
 }
 
 struct UsageMenuView: View {
@@ -10,38 +20,60 @@ struct UsageMenuView: View {
     @Bindable var appearance: AppearancePreferenceStore
     @Bindable var notifier: QuotaAlertNotifier
     var onShowGuide: () -> Void
+    var onLayout: () -> Void = {}
+
+    @State private var tab: MenuTab = .usage
+
+    private var scale: Double { appearance.interfaceScale }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: MenuMetrics.points(12, scale: scale)) {
             header
-            quotaCard
-            controls
+            Picker("Section", selection: $tab) {
+                ForEach(MenuTab.allCases) { page in
+                    Text(page.title).tag(page)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .font(MenuMetrics.font(14, scale: scale, weight: .semibold))
+            .accessibilityLabel("Section")
+
+            switch tab {
+            case .usage:
+                quotaCard
+            case .settings:
+                settings
+            }
         }
-        .padding(12)
-        .frame(width: MenuLayout.width)
-        .liquidGlassBackground(menuShell: true, preference: appearance.preference)
+        .padding(MenuMetrics.points(14, scale: scale))
+        .frame(width: MenuMetrics.width(for: scale))
+        .liquidGlassBackground(menuShell: true, scheme: appearance.resolvedScheme)
+        .environment(\.menuScale, scale)
         .task {
             await notifier.refreshAuthorizationStatus()
         }
+        .onChange(of: tab) { _, _ in onLayout() }
+        .onChange(of: appearance.interfaceScale) { _, _ in onLayout() }
     }
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MenuMetrics.points(2, scale: scale)) {
                 Text("Grok & Cursor Usage")
-                    .font(.title3.weight(.semibold))
+                    .font(MenuMetrics.font(20, scale: scale, weight: .semibold))
                     .foregroundStyle(LiquidGlass.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                 Text(updatedLabel)
-                    .font(.caption)
+                    .font(MenuMetrics.font(13, scale: scale))
                     .foregroundStyle(LiquidGlass.textSecondary)
                     .lineLimit(1)
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: MenuMetrics.points(8, scale: scale))
             if quotas.isRefreshing {
                 ProgressView()
-                    .controlSize(.small)
+                    .controlSize(.regular)
             }
             Button("Refresh") {
                 Task { await quotas.refresh() }
@@ -50,18 +82,23 @@ struct UsageMenuView: View {
             .keyboardShortcut("r")
             .disabled(quotas.isRefreshing)
             .accessibilityHint("Reads Cursor and Grok usage again")
+            Button("Quit") {
+                NSApp.terminate(nil)
+            }
+            .keyboardShortcut("q")
+            .glassPlainButton(compact: true)
         }
     }
 
     private var quotaCard: some View {
-        GlassPanel(padding: 14) {
-            VStack(alignment: .leading, spacing: 14) {
+        GlassPanel(padding: MenuMetrics.points(16, scale: scale)) {
+            VStack(alignment: .leading, spacing: MenuMetrics.points(16, scale: scale)) {
                 Text("Subscription Usage")
-                    .font(.headline)
+                    .font(MenuMetrics.font(18, scale: scale, weight: .semibold))
                     .foregroundStyle(LiquidGlass.textPrimary)
                 if quotas.bars.isEmpty {
                     Text(quotas.isRefreshing ? "Checking which plans are on this Mac…" : "No usage pools found")
-                        .font(.caption)
+                        .font(MenuMetrics.font(14, scale: scale))
                         .foregroundStyle(LiquidGlass.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
@@ -75,29 +112,29 @@ struct UsageMenuView: View {
     }
 
     private func quotaRow(_ bar: QuotaBar) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .bottom, spacing: 6) {
-                VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: MenuMetrics.points(4, scale: scale)) {
+            HStack(alignment: .bottom, spacing: MenuMetrics.points(8, scale: scale)) {
+                VStack(alignment: .leading, spacing: MenuMetrics.points(2, scale: scale)) {
                     Text(bar.title)
-                        .font(.caption.weight(.semibold))
+                        .font(MenuMetrics.font(16, scale: scale, weight: .semibold))
                         .foregroundStyle(LiquidGlass.textPrimary)
                     if !bar.subtitle.isEmpty {
                         Text(bar.subtitle)
-                            .font(.caption2)
+                            .font(MenuMetrics.font(13, scale: scale))
                             .foregroundStyle(LiquidGlass.textSecondary)
                             .lineLimit(2)
                             .minimumScaleFactor(0.75)
                     }
                 }
-                Spacer(minLength: 4)
-                VStack(alignment: .trailing, spacing: 1) {
+                Spacer(minLength: MenuMetrics.points(6, scale: scale))
+                VStack(alignment: .trailing, spacing: MenuMetrics.points(2, scale: scale)) {
                     Text(bar.usedText)
-                        .font(.callout.weight(.semibold).monospacedDigit())
+                        .font(MenuMetrics.font(16, scale: scale, weight: .semibold, monospaced: true))
                         .foregroundStyle(LiquidGlass.textPrimary)
                         .lineLimit(1)
                     if let pace = bar.pace {
                         Text(pace.text)
-                            .font(.callout.weight(.semibold).monospacedDigit())
+                            .font(MenuMetrics.font(14, scale: scale, weight: .semibold, monospaced: true))
                             .foregroundStyle(paceColor(pace))
                             .lineLimit(1)
                     }
@@ -105,11 +142,11 @@ struct UsageMenuView: View {
             }
             if bar.state == .ready {
                 QuotaMeterBar(fill: bar.usedFraction, color: usageBandColor(bar.usedFraction))
-                    .frame(height: 8)
+                    .frame(height: MenuMetrics.points(10, scale: scale))
             }
             if !bar.detail.isEmpty {
                 Text(bar.detail)
-                    .font(.caption2)
+                    .font(MenuMetrics.font(13, scale: scale))
                     .foregroundStyle(LiquidGlass.textSecondary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.75)
@@ -119,38 +156,104 @@ struct UsageMenuView: View {
         .accessibilityLabel(quotaAccessibility(bar))
     }
 
-    private var controls: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Toggle("Open at Login", isOn: launchAtLoginBinding)
-                .font(.callout)
-            Toggle("Spike alerts", isOn: $notifier.alertsEnabled)
-                .font(.callout)
-                .onChange(of: notifier.alertsEnabled) { _, enabled in
-                    guard enabled else { return }
-                    Task { await notifier.requestAuthorizationIfNeeded() }
+    private var settings: some View {
+        GlassPanel(padding: MenuMetrics.points(16, scale: scale)) {
+            VStack(alignment: .leading, spacing: MenuMetrics.points(16, scale: scale)) {
+                VStack(alignment: .leading, spacing: MenuMetrics.points(6, scale: scale)) {
+                    HStack {
+                        Text("Text Size")
+                            .font(MenuMetrics.font(16, scale: scale, weight: .semibold))
+                            .foregroundStyle(LiquidGlass.textPrimary)
+                        Spacer()
+                        Text("\(sizePercent)%")
+                            .font(MenuMetrics.font(14, scale: scale, weight: .semibold, monospaced: true))
+                            .foregroundStyle(LiquidGlass.textSecondary)
+                            .accessibilityHidden(true)
+                        if abs(scale - MenuMetrics.defaultScale) > 0.001 {
+                            Button("Reset") {
+                                appearance.interfaceScale = MenuMetrics.defaultScale
+                            }
+                            .font(MenuMetrics.font(14, scale: scale))
+                            .buttonStyle(.borderless)
+                            .accessibilityHint("Returns text to the default size")
+                        }
+                    }
+                    Slider(
+                        value: sizePercentBinding,
+                        in: MenuMetrics.minimumPercent...MenuMetrics.maximumPercent,
+                        step: MenuMetrics.percentStep
+                    ) {
+                        Text("Text Size")
+                    } minimumValueLabel: {
+                        Image(systemName: "textformat.size.smaller")
+                            .accessibilityHidden(true)
+                    } maximumValueLabel: {
+                        Image(systemName: "textformat.size.larger")
+                            .accessibilityHidden(true)
+                    }
+                    .labelsHidden()
+                    .accessibilityValue("\(sizePercent) percent")
+                    Text("Scales the text and the whole menu.")
+                        .font(MenuMetrics.font(13, scale: scale))
+                        .foregroundStyle(LiquidGlass.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            if notifier.authorization == .denied {
-                Button("Open Notification Settings") {
-                    QuotaAlertNotifier.openNotificationSettings()
+
+                VStack(alignment: .leading, spacing: MenuMetrics.points(6, scale: scale)) {
+                    Text("Appearance")
+                        .font(MenuMetrics.font(16, scale: scale, weight: .semibold))
+                        .foregroundStyle(LiquidGlass.textPrimary)
+                    AppearancePicker(preference: $appearance.preference)
+                    Text("System follows this Mac. Light or Dark keeps the menu that way.")
+                        .font(MenuMetrics.font(13, scale: scale))
+                        .foregroundStyle(LiquidGlass.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .font(.caption)
-                .buttonStyle(.borderless)
+
+                Toggle("Open at Login", isOn: launchAtLoginBinding)
+                    .font(MenuMetrics.font(16, scale: scale))
+                VStack(alignment: .leading, spacing: MenuMetrics.points(4, scale: scale)) {
+                    Toggle("Spike Alerts", isOn: $notifier.alertsEnabled)
+                        .font(MenuMetrics.font(16, scale: scale))
+                        .onChange(of: notifier.alertsEnabled) { _, enabled in
+                            guard enabled else { return }
+                            Task { await notifier.requestAuthorizationIfNeeded() }
+                        }
+                    Text("Notifies you, at most once per pool each day, when a pool climbs \(QuotaBurnEvaluator.dailyPercentText) or more since your first reading that day.")
+                        .font(MenuMetrics.font(13, scale: scale))
+                        .foregroundStyle(LiquidGlass.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if notifier.authorization == .denied {
+                    Button("Open Notification Settings") {
+                        QuotaAlertNotifier.openNotificationSettings()
+                    }
+                    .font(MenuMetrics.font(14, scale: scale))
+                    .buttonStyle(.borderless)
+                }
+                Text("Uses the Cursor and Grok sign-ins already on this Mac. Usage is requested only from Cursor and xAI. The latest numbers sync through your iCloud for the iPhone app.")
+                    .font(MenuMetrics.font(13, scale: scale))
+                    .foregroundStyle(LiquidGlass.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Guide", action: onShowGuide)
+                        .glassPlainButton(compact: true)
+                    Spacer(minLength: MenuMetrics.points(8, scale: scale))
+                }
             }
-            Text("Reads the Cursor and Grok sign-in already on this Mac. The iPhone app shows this card from iCloud.")
-                .font(.caption2)
-                .foregroundStyle(LiquidGlass.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Button("Guide", action: onShowGuide)
-                    .glassPlainButton(compact: true)
-                Spacer(minLength: 8)
-                Button("Quit") {
-                    NSApp.terminate(nil)
-                }
-                .keyboardShortcut("q")
-                .glassPlainButton(compact: true)
-            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var sizePercent: Int {
+        Int(MenuMetrics.percent(for: scale).rounded())
+    }
+
+    private var sizePercentBinding: Binding<Double> {
+        Binding(
+            get: { MenuMetrics.percent(for: appearance.interfaceScale) },
+            set: { appearance.interfaceScale = MenuMetrics.scale(forPercent: $0) }
+        )
     }
 
     private var launchAtLoginBinding: Binding<Bool> {

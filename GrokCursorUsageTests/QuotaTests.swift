@@ -393,7 +393,7 @@ struct QuotaTests {
 
     @Test
     func cursorStateStoreQueryTimesOutOnHungSqlite() throws {
-        let script = hungCommandScript()
+        let script = try hungCommandScript()
         defer { try? FileManager.default.removeItem(at: script) }
         let db = FileManager.default.temporaryDirectory
             .appendingPathComponent("hotspot-hung-db-\(UUID().uuidString).vscdb")
@@ -501,6 +501,77 @@ struct QuotaTests {
         #expect(monitor.bars.first { $0.kind == .otherModels }?.state == .ready)
         #expect(monitor.bars.first { $0.kind == .grokBot }?.state == .ready)
         #expect(monitor.lastUpdated != nil)
+        #expect(monitor.menuBarKind == .grokBot)
+    }
+
+    @Test @MainActor
+    func interfaceScaleStartsAtTheDefaultAndStaysInRange() {
+        let suite = "com.grokcursorusage.tests.scale.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = AppearancePreferenceStore(defaults: defaults)
+        #expect(store.interfaceScale == MenuMetrics.defaultScale)
+        #expect(MenuMetrics.percent(for: store.interfaceScale) == 100)
+        #expect(MenuMetrics.percent(for: MenuMetrics.minimumScale) == 75)
+        #expect(MenuMetrics.percent(for: MenuMetrics.maximumScale) == 125)
+        store.interfaceScale = 9
+        #expect(store.interfaceScale == MenuMetrics.maximumScale)
+        store.interfaceScale = 0.2
+        #expect(store.interfaceScale == MenuMetrics.minimumScale)
+        let restored = AppearancePreferenceStore(defaults: defaults)
+        #expect(restored.interfaceScale == MenuMetrics.minimumScale)
+    }
+
+    @Test
+    func menuBarFollowsThePoolThatJustMoved() {
+        func bar(_ kind: QuotaKind, _ percent: Double) -> QuotaBar {
+            QuotaParsing.percentBar(kind: kind, usedPercent: percent, subtitle: "", detail: "")
+        }
+
+        let first = QuotaMenuBarFocus.empty.advanced(by: [
+            bar(.cursorModels, 15),
+            bar(.otherModels, 48),
+            bar(.grokBot, 14),
+        ])
+        #expect(first.kind == .otherModels)
+
+        let grokMoved = first.advanced(by: [
+            bar(.cursorModels, 15),
+            bar(.otherModels, 48),
+            bar(.superGrok, 6),
+            bar(.grokBot, 14),
+        ])
+        #expect(grokMoved.kind == .otherModels)
+
+        let grokRose = grokMoved.advanced(by: [
+            bar(.cursorModels, 15),
+            bar(.otherModels, 48),
+            bar(.superGrok, 8),
+            bar(.grokBot, 14),
+        ])
+        #expect(grokRose.kind == .superGrok)
+
+        let apiRoseMore = grokRose.advanced(by: [
+            bar(.cursorModels, 16),
+            bar(.otherModels, 55),
+            bar(.superGrok, 9),
+            bar(.grokBot, 14),
+        ])
+        #expect(apiRoseMore.kind == .otherModels)
+
+        let held = apiRoseMore.advanced(by: [
+            bar(.cursorModels, 16),
+            bar(.otherModels, 55),
+            bar(.superGrok, 9),
+        ])
+        #expect(held.kind == .otherModels)
+
+        let apiGone = held.advanced(by: [
+            bar(.cursorModels, 16),
+            bar(.superGrok, 9),
+        ])
+        #expect(apiGone.kind == .cursorModels)
     }
 
     @Test
@@ -707,4 +778,61 @@ struct QuotaTests {
         quiet.lastUpdated = previous.lastUpdated.addingTimeInterval(30)
         #expect(!QuotaSnapshotPublishPolicy.shouldWrite(previous: previous, next: quiet))
     }
+}
+
+private func binarycookiesInt32BE(_ data: Data, _ offset: Int) -> Int {
+    let bytes = [UInt8](data)
+    let value = UInt32(bytes[offset]) << 24
+        | UInt32(bytes[offset + 1]) << 16
+        | UInt32(bytes[offset + 2]) << 8
+        | UInt32(bytes[offset + 3])
+    return Int(Int32(bitPattern: value))
+}
+
+private func protoVarint(_ field: Int, _ value: UInt64) -> Data {
+    var bytes = protoKey(field, wire: 0)
+    bytes.append(contentsOf: protoVarintValue(value))
+    return Data(bytes)
+}
+
+private func protoBytes(_ field: Int, _ payload: Data) -> Data {
+    var bytes = protoKey(field, wire: 2)
+    bytes.append(contentsOf: protoVarintValue(UInt64(payload.count)))
+    var data = Data(bytes)
+    data.append(payload)
+    return data
+}
+
+private func protoFixed32(_ field: Int, _ value: Float) -> Data {
+    var bytes = protoKey(field, wire: 5)
+    let bits = value.bitPattern
+    bytes.append(UInt8(bits & 0xFF))
+    bytes.append(UInt8((bits >> 8) & 0xFF))
+    bytes.append(UInt8((bits >> 16) & 0xFF))
+    bytes.append(UInt8((bits >> 24) & 0xFF))
+    return Data(bytes)
+}
+
+private func protoKey(_ field: Int, wire: Int) -> [UInt8] {
+    protoVarintValue(UInt64((field << 3) | wire))
+}
+
+private func protoVarintValue(_ value: UInt64) -> [UInt8] {
+    var value = value
+    var bytes: [UInt8] = []
+    repeat {
+        var byte = UInt8(value & 0x7F)
+        value >>= 7
+        if value != 0 { byte |= 0x80 }
+        bytes.append(byte)
+    } while value != 0
+    return bytes
+}
+
+private func hungCommandScript() throws -> URL {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("hotspot-hung-\(UUID().uuidString).sh")
+    try "#!/bin/sh\nsleep 30\n".write(to: url, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+    return url
 }

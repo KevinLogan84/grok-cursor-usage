@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !Self.isRunningTests else { return }
 
         let model = AppModel()
+        model.appearance.startObservingSystemAppearance()
         self.model = model
         statusBar = StatusBarController(model: model)
 

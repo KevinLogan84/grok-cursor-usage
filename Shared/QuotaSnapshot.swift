@@ -77,6 +77,8 @@ struct SnapshotQuotaBar: Codable, Equatable, Sendable, Identifiable {
 
 enum QuotaSnapshotCodec {
     static let key = "com.grokcursorusage.quotaSnapshot.v1"
+    /// Author's container. Anyone else building the iPhone app replaces this
+    /// and the same ID in both entitlements files. See the README.
     static let iCloudContainerID = "iCloud.com.grokcursorusage"
     static let kvStoreIdentifier = "$(TeamIdentifierPrefix)com.grokcursorusage"
 

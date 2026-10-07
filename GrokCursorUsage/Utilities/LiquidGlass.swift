@@ -208,13 +208,23 @@ struct GlassProminentButtonStyle: ButtonStyle {
     var compact = false
 
     func makeBody(configuration: Configuration) -> some View {
+        GlassProminentButtonBody(configuration: configuration, compact: compact)
+    }
+}
+
+private struct GlassProminentButtonBody: View {
+    @Environment(\.menuScale) private var menuScale
+    let configuration: ButtonStyleConfiguration
+    let compact: Bool
+
+    var body: some View {
         configuration.label
-            .font(compact ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
+            .font(MenuMetrics.font(compact ? 13 : 14, scale: menuScale, weight: .semibold))
             .foregroundStyle(Color.white)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .padding(.horizontal, compact ? 8 : 14)
-            .padding(.vertical, compact ? 6 : 7)
+            .padding(.horizontal, MenuMetrics.points(compact ? 10 : 14, scale: menuScale))
+            .padding(.vertical, MenuMetrics.points(compact ? 7 : 8, scale: menuScale))
             .background {
                 Capsule()
                     .fill(LiquidGlass.accent.opacity(configuration.isPressed ? 0.82 : 1))
@@ -246,17 +256,18 @@ struct GlassPlainButtonStyle: ButtonStyle {
 private struct GlassPlainButtonBody: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.menuScale) private var menuScale
     let configuration: ButtonStyleConfiguration
     let compact: Bool
 
     var body: some View {
         let label = configuration.label
-            .font(compact ? .caption.weight(.medium) : .subheadline.weight(.medium))
+            .font(MenuMetrics.font(compact ? 13 : 14, scale: menuScale, weight: .medium))
             .foregroundStyle(LiquidGlass.textPrimary)
             .lineLimit(1)
             .minimumScaleFactor(0.8)
-            .padding(.horizontal, compact ? 8 : 14)
-            .padding(.vertical, compact ? 6 : 7)
+            .padding(.horizontal, MenuMetrics.points(compact ? 10 : 14, scale: menuScale))
+            .padding(.vertical, MenuMetrics.points(compact ? 7 : 8, scale: menuScale))
 
         Group {
             if reduceTransparency {
@@ -289,17 +300,12 @@ private struct GlassPlainButtonBody: View {
 
 struct GlassBackground: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorScheme) private var environmentScheme
     var clippedToMenuShell: Bool = false
-    var preference: AppearancePreference = .system
-
-    private var scheme: ColorScheme {
-        preference.colorScheme ?? environmentScheme
-    }
+    var scheme: ColorScheme
 
     func body(content: Content) -> some View {
         let themed = content
-            .preferredColorScheme(preference.colorScheme)
+            .preferredColorScheme(scheme)
             .tint(LiquidGlass.accent)
 
         if clippedToMenuShell {
@@ -351,9 +357,9 @@ struct GlassBackground: ViewModifier {
 extension View {
     func liquidGlassBackground(
         menuShell: Bool = false,
-        preference: AppearancePreference = .system
+        scheme: ColorScheme
     ) -> some View {
-        modifier(GlassBackground(clippedToMenuShell: menuShell, preference: preference))
+        modifier(GlassBackground(clippedToMenuShell: menuShell, scheme: scheme))
     }
 
     func glassProminentButton(compact: Bool = false) -> some View {

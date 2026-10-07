@@ -108,6 +108,50 @@ struct QuotaBar: Equatable, Identifiable {
     }
 }
 
+/// Which pool the menu bar names. A rise in percent means that pool was just used.
+/// Until another pool rises, the menu bar stays on the last one that moved.
+struct QuotaMenuBarFocus: Equatable, Sendable {
+    var kind: QuotaKind?
+    var percents: [QuotaKind: Double]
+
+    static let empty = QuotaMenuBarFocus(kind: nil, percents: [:])
+
+    /// Ignores float noise. A real tick from Cursor or Grok is larger than this.
+    static let usageTick = 0.01
+
+    func advanced(by bars: [QuotaBar]) -> QuotaMenuBarFocus {
+        let ready = bars.filter(\.isReady)
+        let present = Set(bars.map(\.kind))
+        var increases: [(kind: QuotaKind, delta: Double, percent: Double)] = []
+        for bar in ready {
+            guard let before = percents[bar.kind] else { continue }
+            let delta = bar.usedPercent - before
+            guard delta > Self.usageTick else { continue }
+            increases.append((bar.kind, delta, bar.usedPercent))
+        }
+
+        let active: QuotaKind?
+        if let winner = increases.max(by: { lhs, rhs in
+            if lhs.delta != rhs.delta { return lhs.delta < rhs.delta }
+            if lhs.kind == kind { return false }
+            if rhs.kind == kind { return true }
+            return lhs.percent < rhs.percent
+        }) {
+            active = winner.kind
+        } else if let kind, ready.contains(where: { $0.kind == kind }) {
+            active = kind
+        } else {
+            active = ready.max(by: { $0.usedPercent < $1.usedPercent })?.kind
+        }
+
+        var nextPercents = percents.filter { present.contains($0.key) }
+        for bar in ready {
+            nextPercents[bar.kind] = bar.usedPercent
+        }
+        return QuotaMenuBarFocus(kind: active, percents: nextPercents)
+    }
+}
+
 enum QuotaParsing {
     /// One bar per Cursor pool that this account actually reports. Auto and API
     /// are separate. A missing percent means that pool is not on the plan.
@@ -506,8 +550,7 @@ enum QuotaParsing {
 
     static func inferredPeriodStart(for kind: QuotaKind, reset: Date?) -> Date? {
         guard let reset else { return nil }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = chicago
+        let calendar = Calendar(identifier: .gregorian)
         switch kind {
         case .cursorModels, .otherModels, .onDemand:
             return calendar.date(byAdding: .month, value: -1, to: reset)
@@ -630,16 +673,11 @@ enum QuotaParsing {
         Int(value.rounded())
     }
 
-    private static var chicago: TimeZone {
-        TimeZone(identifier: "America/Chicago") ?? .current
-    }
-
     private static var monthDay: DateFormatter {
         let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.timeZone = chicago
-        formatter.dateFormat = "MMM d"
+        formatter.locale = .current
+        formatter.timeZone = .current
+        formatter.setLocalizedDateFormatFromTemplate("MMMd")
         return formatter
     }
 }
@@ -769,7 +807,7 @@ enum QuotaBurnEvaluator {
         "\(Int((dailyFractionThreshold * 100).rounded()))%"
     }
 
-    /// First sample of a Chicago day becomes the baseline. Notify once if used
+    /// First sample of a local calendar day becomes the baseline. Notify once if used
     /// climbs by 15 percentage points after that. `usedFraction` is the raw
     /// provider value (1.2 = 120%), not the capped bar fill, so overage still counts.
     static func evaluate(

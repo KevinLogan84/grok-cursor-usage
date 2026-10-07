@@ -4,6 +4,7 @@ import Foundation
 
 /// Posts the once-a-day spike alert when a subscription bar climbs 15 points.
 @MainActor
+@Observable
 final class QuotaAlertNotifier {
     static let enabledKey = "com.grokcursorusage.alerts.enabled"
 
@@ -80,7 +81,7 @@ final class QuotaAlertNotifier {
         let content = UNMutableNotificationContent()
         content.title = "\(bar.title) usage spike"
         content.body =
-            "\(ChicagoDay.dayLabel(for: dayKey)): \(bar.title) used more than \(QuotaBurnEvaluator.dailyPercentText) of its allowance today (\(bar.usedText))."
+            "\(LocalDay.dayLabel(for: dayKey)): \(bar.title) used \(QuotaBurnEvaluator.dailyPercentText) or more of its allowance today (\(bar.usedText))."
         content.sound = .default
         let request = UNNotificationRequest(
             identifier: "quota-burn-\(bar.kind.rawValue)-\(dayKey)",

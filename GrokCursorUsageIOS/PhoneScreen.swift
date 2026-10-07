@@ -119,7 +119,7 @@ struct PhoneScreen: View {
     private var refreshButton: some View {
         Button(action: refreshFromICloud) {
             ZStack {
-                Text("REFRESH")
+                Text("Refresh")
                     .font(.subheadline.weight(.semibold))
                     .opacity(isRefreshing ? 0 : 1)
                 if isRefreshing {
