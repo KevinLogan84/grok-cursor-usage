@@ -1,0 +1,25 @@
+---
+description: After every commit and push, pull that commit and install the Mac app on this machine.
+alwaysApply: true
+---
+
+# Install on this Mac after commit and push
+
+When you commit and push **Grok & Cursor Usage**, finish on this Mac. Do not ask Kevin to pull, build, or install.
+
+1. `git pull origin` for the branch you just pushed, so this checkout matches Origin.
+2. Build the Mac app:
+
+```bash
+xcodebuild -project GrokCursorUsage.xcodeproj -scheme GrokCursorUsage \
+  -configuration Debug \
+  -derivedDataPath /tmp/GrokCursorUsageDerivedData \
+  -destination 'platform=macOS' \
+  -allowProvisioningUpdates build
+```
+
+3. Quit **Grok & Cursor Usage** if it is running.
+4. Replace `/Applications/Grok & Cursor Usage.app` with the built app and launch that copy.
+5. Use `/tmp/GrokCursorUsageDerivedData`. Never put DerivedData inside iCloud.
+
+Skip the build only when this machine has no `xcodebuild`.

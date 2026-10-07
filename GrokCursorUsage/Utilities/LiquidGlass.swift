@@ -300,17 +300,12 @@ private struct GlassPlainButtonBody: View {
 
 struct GlassBackground: ViewModifier {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.colorScheme) private var environmentScheme
     var clippedToMenuShell: Bool = false
-    var preference: AppearancePreference = .system
-
-    private var scheme: ColorScheme {
-        preference.colorScheme ?? environmentScheme
-    }
+    var scheme: ColorScheme
 
     func body(content: Content) -> some View {
         let themed = content
-            .preferredColorScheme(preference.colorScheme)
+            .preferredColorScheme(scheme)
             .tint(LiquidGlass.accent)
 
         if clippedToMenuShell {
@@ -362,9 +357,9 @@ struct GlassBackground: ViewModifier {
 extension View {
     func liquidGlassBackground(
         menuShell: Bool = false,
-        preference: AppearancePreference = .system
+        scheme: ColorScheme
     ) -> some View {
-        modifier(GlassBackground(clippedToMenuShell: menuShell, preference: preference))
+        modifier(GlassBackground(clippedToMenuShell: menuShell, scheme: scheme))
     }
 
     func glassProminentButton(compact: Bool = false) -> some View {

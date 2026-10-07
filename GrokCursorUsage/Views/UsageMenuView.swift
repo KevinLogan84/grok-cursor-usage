@@ -48,7 +48,7 @@ struct UsageMenuView: View {
         }
         .padding(MenuMetrics.points(14, scale: scale))
         .frame(width: MenuMetrics.width(for: scale))
-        .liquidGlassBackground(menuShell: true, preference: appearance.preference)
+        .liquidGlassBackground(menuShell: true, scheme: appearance.resolvedScheme)
         .environment(\.menuScale, scale)
         .task {
             await notifier.refreshAuthorizationStatus()
@@ -189,6 +189,10 @@ struct UsageMenuView: View {
                         .font(MenuMetrics.font(16, scale: scale, weight: .semibold))
                         .foregroundStyle(LiquidGlass.textPrimary)
                     AppearancePicker(preference: $appearance.preference)
+                    Text("System follows this Mac. Light or Dark keeps the menu that way.")
+                        .font(MenuMetrics.font(13, scale: scale))
+                        .foregroundStyle(LiquidGlass.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Toggle("Open at Login", isOn: launchAtLoginBinding)

@@ -54,6 +54,13 @@ final class AppearancePreferenceStore {
         }
     }
 
+    /// What the system is using right now. The menu follows this when Appearance is System.
+    private(set) var systemScheme: ColorScheme
+
+    var resolvedScheme: ColorScheme {
+        preference.colorScheme ?? systemScheme
+    }
+
     /// 1.25 is a quarter larger than the original menu. The slider moves around that.
     var interfaceScale: Double {
         didSet {
@@ -68,6 +75,7 @@ final class AppearancePreferenceStore {
     }
 
     private let defaults: UserDefaults
+    private var isObservingSystem = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -76,7 +84,48 @@ final class AppearancePreferenceStore {
         )
         let stored = defaults.object(forKey: Self.scaleKey) as? Double
         interfaceScale = MenuMetrics.clamp(stored ?? MenuMetrics.defaultScale)
+        systemScheme = Self.currentSystemScheme()
     }
+
+#if os(macOS)
+    var resolvedNSAppearance: NSAppearance {
+        switch resolvedScheme {
+        case .dark: NSAppearance(named: .darkAqua)!
+        case .light: NSAppearance(named: .aqua)!
+        @unknown default: NSAppearance(named: .aqua)!
+        }
+    }
+
+    func startObservingSystemAppearance() {
+        guard !isObservingSystem else { return }
+        isObservingSystem = true
+        refreshSystemScheme()
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshSystemScheme()
+            }
+        }
+    }
+
+    func refreshSystemScheme() {
+        let next = Self.currentSystemScheme()
+        if next != systemScheme {
+            systemScheme = next
+        }
+    }
+
+    private static func currentSystemScheme() -> ColorScheme {
+        let appearance = NSApp?.effectiveAppearance ?? NSAppearance.currentDrawing()
+        let match = appearance.bestMatch(from: [.darkAqua, .aqua])
+        return match == .darkAqua ? .dark : .light
+    }
+#else
+    private static func currentSystemScheme() -> ColorScheme { .light }
+#endif
 }
 
 /// Sizes for the Mac menu. `defaultScale` is a quarter larger than the original layout.

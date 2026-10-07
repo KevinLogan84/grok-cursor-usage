@@ -93,6 +93,7 @@ final class StatusBarController {
             _ = model.quotas.isRefreshing
             _ = model.quotas.lastUpdated
             _ = model.appearance.preference
+            _ = model.appearance.systemScheme
             _ = model.appearance.interfaceScale
         } onChange: { [weak self] in
             Task { @MainActor in
@@ -106,9 +107,11 @@ final class StatusBarController {
     }
 
     private func applyWindowAppearances() {
-        let appearance = model.appearance.preference.nsAppearance
+        let appearance = model.appearance.resolvedNSAppearance
         menuPanel?.appearance = appearance
+        menuPanel?.contentView?.appearance = appearance
         guideWindow?.appearance = appearance
+        guideWindow?.contentView?.appearance = appearance
     }
 
     private func refreshStatusItem() {
@@ -170,7 +173,7 @@ final class StatusBarController {
         panel.hasShadow = true
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = false
-        panel.appearance = model.appearance.preference.nsAppearance
+        panel.appearance = model.appearance.resolvedNSAppearance
         panel.contentViewController = hosting
         panel.setContentSize(size)
         Self.applyMenuShellMask(to: panel)
@@ -298,7 +301,7 @@ final class StatusBarController {
         window.title = "Grok & Cursor Usage"
         window.isReleasedWhenClosed = false
         window.contentViewController = hosting
-        LiquidGlass.applyChrome(to: window, appearance: model.appearance.preference.nsAppearance)
+        LiquidGlass.applyChrome(to: window, appearance: model.appearance.resolvedNSAppearance)
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()

@@ -61,7 +61,7 @@ struct GuideView: View {
             minHeight: MenuMetrics.points(520, scale: scale)
         )
         .environment(\.menuScale, scale)
-        .liquidGlassBackground(preference: appearance.preference)
+        .liquidGlassBackground(scheme: appearance.resolvedScheme)
     }
 
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
