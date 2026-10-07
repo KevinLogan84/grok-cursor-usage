@@ -18,7 +18,7 @@ There is no downloadable build. Clone this repo and run it from Xcode.
 - macOS 14 or later
 - [Xcode](https://apps.apple.com/app/xcode/id497799835) from the Mac App Store
 - An Apple ID added in Xcode (**Xcode → Settings → Accounts**)
-- Cursor, the grok CLI, or Grok.app signed in on the same Mac
+- Cursor, the grok CLI, or both signed in on the same Mac (Grok.app is optional)
 
 A free Apple ID can run the menu bar app on your own Mac. The iPhone app needs a paid [Apple Developer Program](https://developer.apple.com/programs/) membership, because it uses iCloud.
 
@@ -58,10 +58,14 @@ To keep the app after you close Xcode, choose **Product → Show Build Folder in
 | Pool | Shows up when |
 | --- | --- |
 | Cursor Auto and Cursor API | Cursor is signed in on this Mac. |
-| Grok | The grok CLI (`~/.grok/auth.json`) or Grok.app is signed in. |
+| Grok | The grok CLI is signed in (`grok login`, which writes `~/.grok/auth.json`). Grok.app works too if you turn it on, as described below. |
 | Grok Bot | Cursor reports a Grok Bot allowance for your account. |
 
-Cursor’s token is read from `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`. The `GROK_HOME` and `GROK_AUTH_JSON` environment variables are honored, but an app opened from Finder does not see variables set in your shell profile. To use them, add them under **Product → Scheme → Edit Scheme → Run → Arguments → Environment Variables**. They apply only when Xcode launches the app.
+Cursor’s token is read from `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`.
+
+By default, Grok uses only the grok CLI login, and the app needs no special permissions. To use Grok.app’s sign-in instead, choose **CLI + Grok.app** under **Grok Sign-In** in the **Settings** tab, then turn on **Full Disk Access** for Grok & Cursor Usage in **System Settings → Privacy & Security**. Grok.app keeps its grok.com session in a cookie file that other apps cannot read without that permission. In that mode, the CLI is still tried first.
+
+The `GROK_HOME` and `GROK_AUTH_JSON` environment variables are honored, but an app opened from Finder does not see variables set in your shell profile. To use them, add them under **Product → Scheme → Edit Scheme → Run → Arguments → Environment Variables**. They apply only when Xcode launches the app.
 
 ## Using it
 
@@ -69,12 +73,14 @@ Cursor’s token is read from `~/Library/Application Support/Cursor/User/globalS
 - The **Usage** tab lists every pool with its reset date. If a pool cannot be read, its row says what to do next.
 - Pace compares percent used with how much of that pool’s period has passed.
 - **Spike Alerts** posts at most once per pool per day, when that pool climbs 15 points from its first reading that day. The day follows your Mac’s time zone. macOS asks for notification permission when you turn it on. If you declined, the **Settings** tab shows **Open Notification Settings**.
-- The **Settings** tab holds Text Size, Appearance, Open at Login, Spike Alerts, and the in-app **Guide**.
+- The **Settings** tab holds Text Size, Appearance, Grok Sign-In, Open at Login, Spike Alerts, and the in-app **Guide**.
 - **Quit** is in the menu header.
 
 ## Troubleshooting
 
-**Grok says to sign in, but Grok.app is signed in.** Open **System Settings → Privacy & Security → Full Disk Access** and turn on **Grok & Cursor Usage**. Grok.app keeps its grok.com session in a cookie file that other apps cannot read without that permission. Or run `grok login` in Terminal.
+**Grok says to run grok login.** The grok CLI login is missing or expired. Run `grok login` in Terminal, then click **Refresh**. Or switch **Grok Sign-In** to **CLI + Grok.app** and grant Full Disk Access.
+
+**Grok.app is signed in, but Grok is blank.** Choose **CLI + Grok.app** under **Grok Sign-In**, then turn on **Grok & Cursor Usage** in **System Settings → Privacy & Security → Full Disk Access**. The **Open Full Disk Access Settings** button in Settings goes straight there.
 
 **Cursor says to open Cursor.** Open Cursor once and stay signed in, then click **Refresh**.
 
@@ -86,7 +92,7 @@ Cursor’s token is read from `~/Library/Application Support/Cursor/User/globalS
 
 The project runs no server and includes no analytics or tracking.
 
-- **What it reads:** Cursor’s local database (`state.vscdb`), the grok CLI’s `auth.json`, and, with Full Disk Access, Grok.app’s cookie file. It does not change any of them.
+- **What it reads:** Cursor’s local database (`state.vscdb`) and the grok CLI’s `auth.json`. Grok.app’s cookie file is read only if you choose **CLI + Grok.app** and grant Full Disk Access. It does not change any of these files.
 - **Where it connects:** Cursor (`api2.cursor.sh`) and xAI (`grok.com`, `auth.x.ai`), using those sign-ins to request your usage.
 - **What it stores:** Settings and alert state in the app’s preferences. If iCloud is enabled, the latest usage numbers go to your own iCloud key-value store for the iPhone viewer. Sign-in tokens are never written to iCloud.
 

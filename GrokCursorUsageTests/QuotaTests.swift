@@ -119,6 +119,19 @@ struct QuotaTests {
         #expect(bar.detail.contains("Resets Aug 30"))
     }
 
+    @Test @MainActor
+    func grokSignInDefaultsToTheCLIWithoutGrokApp() {
+        let suite = "com.grokcursorusage.tests.grokSource.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = GrokSignInSourceStore(defaults: defaults)
+        #expect(store.source == .cli)
+        #expect(!store.source.usesGrokApp)
+        store.source = .cliAndGrokApp
+        #expect(GrokSignInSource.current(defaults) == .cliAndGrokApp)
+        #expect(GrokSignInSourceStore(defaults: defaults).source.usesGrokApp)
+    }
+
     @Test
     func grokUnavailableCopyNeverAsksForCLILoginWhenSessionExists() {
         let superGrok = QuotaUnavailableCopy.superGrok(hasGrokBilling: false, hasGrokSession: true)

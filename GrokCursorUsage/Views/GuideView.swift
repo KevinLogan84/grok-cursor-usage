@@ -25,14 +25,14 @@ struct GuideView: View {
                     section("What you see") {
                         Text("The menu bar shows the pool you used most recently, and its percent. It switches when another pool’s usage moves. Open it for every pool on this Mac. A pool your account does not have is left off. When Cursor or Grok reports your plan name, that becomes the title.")
                         bullet("Cursor", "Auto and API models are separate rows, titled with your plan, such as Cursor Pro, when Cursor reports it. Sign in to Cursor on this Mac.")
-                        bullet("Grok", "The grok.com pool, titled with your plan, such as SuperGrok, when Grok reports it. Sign in with the grok CLI or Grok.app.")
+                        bullet("Grok", "The grok.com pool, titled with your plan, such as SuperGrok, when Grok reports it. Sign in with the grok CLI, or opt in to Grok.app in Settings.")
                         bullet("Grok Bot", "Shown only when Cursor reports a Grok Bot allowance.")
                     }
                     section("Before the bars fill in") {
                         Text("This app has no account of its own. It reads sessions that are already on this Mac, then asks Cursor and Grok for usage.")
                         bullet("Cursor", "Open Cursor once and stay signed in. The token lives in ~/Library/Application Support/Cursor/User/globalStorage/state.vscdb.")
-                        bullet("Grok via the CLI", "Sign in with the grok CLI so ~/.grok/auth.json exists.")
-                        bullet("Grok via Grok.app", "Sign in to grok.com in Grok.app. If the bar still asks you to sign in, turn on Full Disk Access for Grok & Cursor Usage so it can read Grok.app’s cookie file.")
+                        bullet("Grok via the CLI (default)", "Run grok login in Terminal so ~/.grok/auth.json exists. No extra permissions are needed.")
+                        bullet("Grok via Grok.app (optional)", "In Settings, set Grok Sign-In to CLI + Grok.app, then turn on Full Disk Access for Grok & Cursor Usage so it can read Grok.app’s cookie file. The CLI is still tried first.")
                     }
                     section("While it is running") {
                         bullet("Refresh", "Usage reloads when you open the app, every minute, and when you click Refresh. The menu bar name follows whichever pool rose.")
@@ -49,10 +49,10 @@ struct GuideView: View {
                         bullet("Refresh", "The phone updates when iCloud delivers a new snapshot. Refresh asks iCloud again. The iPhone target requires iOS 26.")
                     }
                     section("If a bar stays blank") {
-                        Text("The row says what to do next, such as opening Cursor or signing in to grok.com in Grok.app. A Cursor or Grok change can also blank a bar until this app is updated. Quit is in the menu header. There is no Dock icon.")
+                        Text("The row says what to do next, such as opening Cursor or running grok login. A Cursor or Grok change can also blank a bar until this app is updated. Quit is in the menu header. There is no Dock icon.")
                     }
                     section("Privacy") {
-                        Text("The app reads the Cursor and Grok sign-ins already on this Mac without changing them, and uses them only to ask Cursor and xAI for your usage. If iCloud is enabled, the latest usage numbers, never your sign-ins, go to your own iCloud for the iPhone app. The project runs no server and includes no analytics or tracking.")
+                        Text("The app reads the Cursor and grok CLI sign-ins already on this Mac, plus Grok.app’s if you opt in. It never changes them, and uses them only to ask Cursor and xAI for your usage. If iCloud is enabled, the latest usage numbers, never your sign-ins, go to your own iCloud for the iPhone app. The project runs no server and includes no analytics or tracking.")
                     }
                 }
                 .padding(.horizontal, MenuMetrics.points(20, scale: scale))

@@ -784,6 +784,7 @@ enum SubscriptionPlanName {
 enum QuotaUnavailableCopy {
     static let grokUnavailable = "Grok usage is unavailable"
     static let grokNeedsSignIn = "Sign in with the grok CLI or Grok.app"
+    static let grokCLISignInAgain = "Run grok login in Terminal, or turn on Grok.app in Settings"
 
     static func superGrok(hasGrokBilling: Bool, hasGrokSession: Bool) -> String {
         if !hasGrokBilling && !hasGrokSession {

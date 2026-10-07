@@ -151,6 +151,7 @@ final class StatusBarController {
             launchAtLogin: model.launchAtLogin,
             appearance: model.appearance,
             notifier: model.notifier,
+            grokSource: model.grokSource,
             onShowGuide: { [weak self] in
                 self?.closeMenu()
                 self?.showGuide()

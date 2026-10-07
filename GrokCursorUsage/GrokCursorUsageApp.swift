@@ -6,6 +6,7 @@ import SwiftUI
 final class AppModel {
     let launchAtLogin = LaunchAtLoginManager()
     let appearance = AppearancePreferenceStore()
+    let grokSource = GrokSignInSourceStore()
     let notifier: QuotaAlertNotifier
     let quotas: QuotaMonitor
     let snapshots: QuotaSnapshotPublisher
