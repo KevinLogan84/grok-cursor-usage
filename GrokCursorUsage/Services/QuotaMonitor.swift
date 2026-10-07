@@ -273,7 +273,7 @@ final class QuotaMonitor {
     }
 
     private func evaluateBurns() {
-        let dayKey = ChicagoDay.dateKey(for: .now)
+        let dayKey = LocalDay.dateKey(for: .now)
         for bar in bars {
             guard bar.state == .ready else { continue }
             let prefix = "com.grokcursorusage.quota.\(bar.kind.rawValue)"

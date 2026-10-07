@@ -512,6 +512,9 @@ struct QuotaTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = AppearancePreferenceStore(defaults: defaults)
         #expect(store.interfaceScale == 1.25)
+        #expect(MenuMetrics.percent(for: store.interfaceScale) == 100)
+        #expect(MenuMetrics.percent(for: MenuMetrics.minimumScale) == 75)
+        #expect(MenuMetrics.percent(for: MenuMetrics.maximumScale) == 125)
         store.interfaceScale = 9
         #expect(store.interfaceScale == MenuMetrics.maximumScale)
         store.interfaceScale = 0.2

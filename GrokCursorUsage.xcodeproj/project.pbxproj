@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		B00000000000000000000015 /* GrokCursorUsageApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000016 /* GrokCursorUsageApp.swift */; };
 		B00000000000000000000017 /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000018 /* StatusBarController.swift */; };
-		B00000000000000000000019 /* ChicagoDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001A /* ChicagoDay.swift */; };
+		B00000000000000000000019 /* LocalDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001A /* LocalDay.swift */; };
 		B0000000000000000000001B /* GrokAppSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001C /* GrokAppSession.swift */; };
 		B0000000000000000000001D /* LaunchAtLoginManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000001E /* LaunchAtLoginManager.swift */; };
 		B0000000000000000000001F /* QuotaAlertNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000020 /* QuotaAlertNotifier.swift */; };
@@ -54,7 +54,7 @@
 		B00000000000000000000007 /* GrokCursorUsageTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GrokCursorUsageTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B00000000000000000000016 /* GrokCursorUsageApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokCursorUsageApp.swift; sourceTree = "<group>"; };
 		B00000000000000000000018 /* StatusBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
-		B0000000000000000000001A /* ChicagoDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChicagoDay.swift; sourceTree = "<group>"; };
+		B0000000000000000000001A /* LocalDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalDay.swift; sourceTree = "<group>"; };
 		B0000000000000000000001C /* GrokAppSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokAppSession.swift; sourceTree = "<group>"; };
 		B0000000000000000000001E /* LaunchAtLoginManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginManager.swift; sourceTree = "<group>"; };
 		B00000000000000000000020 /* QuotaAlertNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuotaAlertNotifier.swift; sourceTree = "<group>"; };
@@ -110,7 +110,7 @@
 		B0000000000000000000004C /* Services */ = {
 			isa = PBXGroup;
 			children = (
-				B0000000000000000000001A /* ChicagoDay.swift */,
+				B0000000000000000000001A /* LocalDay.swift */,
 				B0000000000000000000001C /* GrokAppSession.swift */,
 				B0000000000000000000001E /* LaunchAtLoginManager.swift */,
 				B00000000000000000000020 /* QuotaAlertNotifier.swift */,

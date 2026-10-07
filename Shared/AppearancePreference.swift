@@ -128,12 +128,24 @@ final class AppearancePreferenceStore {
 #endif
 }
 
-/// Sizes for the Mac menu. `defaultScale` is a quarter larger than the original layout.
+/// Sizes for the Mac menu. `defaultScale` is a quarter larger than the original
+/// layout and is shown as 100%. Text Size runs from 75% to 125% of it.
 enum MenuMetrics {
     static let defaultScale = 1.25
-    static let minimumScale = 1.0
-    static let maximumScale = 1.6
+    static let minimumPercent = 75.0
+    static let maximumPercent = 125.0
+    static let percentStep = 5.0
+    static let minimumScale = defaultScale * minimumPercent / 100
+    static let maximumScale = defaultScale * maximumPercent / 100
     static let baseWidth: CGFloat = 360
+
+    static func percent(for scale: Double) -> Double {
+        scale / defaultScale * 100
+    }
+
+    static func scale(forPercent percent: Double) -> Double {
+        clamp(defaultScale * percent / 100)
+    }
 
     static func clamp(_ scale: Double) -> Double {
         min(max(scale, minimumScale), maximumScale)

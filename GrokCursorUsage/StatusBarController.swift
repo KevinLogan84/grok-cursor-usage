@@ -47,12 +47,14 @@ final class StatusBarController {
     private let model: AppModel
     private let statusItem: NSStatusItem
     private var menuPanel: NSPanel?
+    private var menuHosting: NSHostingController<UsageMenuView>?
     private var guideWindow: NSWindow?
     private nonisolated(unsafe) var updateTimer: Timer?
     private nonisolated(unsafe) var localMouseMonitor: Any?
     private nonisolated(unsafe) var globalMouseMonitor: Any?
     private var cachedStatusImage: NSImage?
     private var cachedStatusImageKey: StatusImageCacheKey?
+    private var reflowScheduled = false
 
     init(model: AppModel) {
         self.model = model
@@ -94,7 +96,7 @@ final class StatusBarController {
                 guard let self else { return }
                 self.refreshStatusItem()
                 self.applyWindowAppearances()
-                self.reflowMenu()
+                self.scheduleReflow()
                 self.observeModel()
             }
         }
@@ -154,11 +156,14 @@ final class StatusBarController {
                 self?.showGuide()
             },
             onLayout: { [weak self] in
-                self?.reflowMenu()
+                self?.scheduleReflow()
             }
         )
         let hosting = NSHostingController(rootView: rootView)
-        hosting.sizingOptions = [.intrinsicContentSize]
+        // The panel is sized by hand. A hosting view that is the window's
+        // content view also resizes the window during layout, and the two
+        // fight until AppKit aborts on too many update-constraints passes.
+        hosting.sizingOptions = []
         let width = MenuMetrics.width(for: model.appearance.interfaceScale)
         let fitted = hosting.sizeThatFits(in: NSSize(width: width, height: 10_000))
         let size = NSSize(width: width, height: max(200, ceil(fitted.height)))
@@ -178,8 +183,13 @@ final class StatusBarController {
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.appearance = model.appearance.resolvedNSAppearance
-        panel.contentViewController = hosting
+        let container = NSView(frame: NSRect(origin: .zero, size: size))
+        hosting.view.frame = container.bounds
+        hosting.view.autoresizingMask = [.width, .height]
+        container.addSubview(hosting.view)
+        panel.contentView = container
         panel.setContentSize(size)
+        menuHosting = hosting
         Self.applyMenuShellMask(to: panel)
         positionMenu(panel, relativeTo: button)
         panel.orderFrontRegardless()
@@ -201,9 +211,19 @@ final class StatusBarController {
         content.layer?.backgroundColor = NSColor.clear.cgColor
     }
 
+    private func scheduleReflow() {
+        guard !reflowScheduled else { return }
+        reflowScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.reflowScheduled = false
+            self.reflowMenu()
+        }
+    }
+
     private func reflowMenu() {
         guard let panel = menuPanel, panel.isVisible,
-              let hosting = panel.contentViewController as? NSHostingController<UsageMenuView>,
+              let hosting = menuHosting,
               let button = statusItem.button
         else { return }
         let width = MenuMetrics.width(for: model.appearance.interfaceScale)
@@ -241,6 +261,7 @@ final class StatusBarController {
         removeClickOutsideMonitor()
         menuPanel?.orderOut(nil)
         menuPanel = nil
+        menuHosting = nil
     }
 
     private func installClickOutsideMonitor() {

@@ -550,8 +550,7 @@ enum QuotaParsing {
 
     static func inferredPeriodStart(for kind: QuotaKind, reset: Date?) -> Date? {
         guard let reset else { return nil }
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = chicago
+        let calendar = Calendar(identifier: .gregorian)
         switch kind {
         case .cursorModels, .otherModels, .onDemand:
             return calendar.date(byAdding: .month, value: -1, to: reset)
@@ -674,16 +673,11 @@ enum QuotaParsing {
         Int(value.rounded())
     }
 
-    private static var chicago: TimeZone {
-        TimeZone(identifier: "America/Chicago") ?? .current
-    }
-
     private static var monthDay: DateFormatter {
         let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US")
-        formatter.timeZone = chicago
-        formatter.dateFormat = "MMM d"
+        formatter.locale = .current
+        formatter.timeZone = .current
+        formatter.setLocalizedDateFormatFromTemplate("MMMd")
         return formatter
     }
 }
@@ -813,7 +807,7 @@ enum QuotaBurnEvaluator {
         "\(Int((dailyFractionThreshold * 100).rounded()))%"
     }
 
-    /// First sample of a Chicago day becomes the baseline. Notify once if used
+    /// First sample of a local calendar day becomes the baseline. Notify once if used
     /// climbs by 15 percentage points after that. `usedFraction` is the raw
     /// provider value (1.2 = 120%), not the capped bar fill, so overage still counts.
     static func evaluate(

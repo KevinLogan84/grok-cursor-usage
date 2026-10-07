@@ -161,23 +161,39 @@ struct UsageMenuView: View {
             VStack(alignment: .leading, spacing: MenuMetrics.points(16, scale: scale)) {
                 VStack(alignment: .leading, spacing: MenuMetrics.points(6, scale: scale)) {
                     HStack {
-                        Text("Size")
+                        Text("Text Size")
                             .font(MenuMetrics.font(16, scale: scale, weight: .semibold))
                             .foregroundStyle(LiquidGlass.textPrimary)
                         Spacer()
-                        Text("\(Int((scale * 100).rounded()))%")
+                        Text("\(sizePercent)%")
                             .font(MenuMetrics.font(14, scale: scale, weight: .semibold, monospaced: true))
                             .foregroundStyle(LiquidGlass.textSecondary)
                             .accessibilityHidden(true)
+                        if abs(scale - MenuMetrics.defaultScale) > 0.001 {
+                            Button("Reset") {
+                                appearance.interfaceScale = MenuMetrics.defaultScale
+                            }
+                            .font(MenuMetrics.font(14, scale: scale))
+                            .buttonStyle(.borderless)
+                            .accessibilityHint("Returns text to the default size")
+                        }
                     }
                     Slider(
-                        value: $appearance.interfaceScale,
-                        in: MenuMetrics.minimumScale...MenuMetrics.maximumScale,
-                        step: 0.05
-                    )
-                    .accessibilityLabel("Size")
-                    .accessibilityValue("\(Int((scale * 100).rounded())) percent")
-                    Text("Scales the type and the whole menu. 125% is the standard size.")
+                        value: sizePercentBinding,
+                        in: MenuMetrics.minimumPercent...MenuMetrics.maximumPercent,
+                        step: MenuMetrics.percentStep
+                    ) {
+                        Text("Text Size")
+                    } minimumValueLabel: {
+                        Image(systemName: "textformat.size.smaller")
+                            .accessibilityHidden(true)
+                    } maximumValueLabel: {
+                        Image(systemName: "textformat.size.larger")
+                            .accessibilityHidden(true)
+                    }
+                    .labelsHidden()
+                    .accessibilityValue("\(sizePercent) percent")
+                    Text("Scales the text and the whole menu.")
                         .font(MenuMetrics.font(13, scale: scale))
                         .foregroundStyle(LiquidGlass.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -196,12 +212,18 @@ struct UsageMenuView: View {
 
                 Toggle("Open at Login", isOn: launchAtLoginBinding)
                     .font(MenuMetrics.font(16, scale: scale))
-                Toggle("Spike alerts", isOn: $notifier.alertsEnabled)
-                    .font(MenuMetrics.font(16, scale: scale))
-                    .onChange(of: notifier.alertsEnabled) { _, enabled in
-                        guard enabled else { return }
-                        Task { await notifier.requestAuthorizationIfNeeded() }
-                    }
+                VStack(alignment: .leading, spacing: MenuMetrics.points(4, scale: scale)) {
+                    Toggle("Spike Alerts", isOn: $notifier.alertsEnabled)
+                        .font(MenuMetrics.font(16, scale: scale))
+                        .onChange(of: notifier.alertsEnabled) { _, enabled in
+                            guard enabled else { return }
+                            Task { await notifier.requestAuthorizationIfNeeded() }
+                        }
+                    Text("Notifies you once a day when a pool climbs \(QuotaBurnEvaluator.dailyPercentText) or more since your first reading that day.")
+                        .font(MenuMetrics.font(13, scale: scale))
+                        .foregroundStyle(LiquidGlass.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if notifier.authorization == .denied {
                     Button("Open Notification Settings") {
                         QuotaAlertNotifier.openNotificationSettings()
@@ -209,7 +231,7 @@ struct UsageMenuView: View {
                     .font(MenuMetrics.font(14, scale: scale))
                     .buttonStyle(.borderless)
                 }
-                Text("Reads the Cursor and Grok sign-in already on this Mac. The iPhone app shows this card from iCloud.")
+                Text("Uses the Cursor and Grok sign-ins already on this Mac. Usage is requested only from Cursor and xAI. The latest numbers sync through your iCloud for the iPhone app.")
                     .font(MenuMetrics.font(13, scale: scale))
                     .foregroundStyle(LiquidGlass.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -221,6 +243,17 @@ struct UsageMenuView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var sizePercent: Int {
+        Int(MenuMetrics.percent(for: scale).rounded())
+    }
+
+    private var sizePercentBinding: Binding<Double> {
+        Binding(
+            get: { MenuMetrics.percent(for: appearance.interfaceScale) },
+            set: { appearance.interfaceScale = MenuMetrics.scale(forPercent: $0) }
+        )
     }
 
     private var launchAtLoginBinding: Binding<Bool> {
