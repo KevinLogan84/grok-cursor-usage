@@ -52,7 +52,7 @@ struct GuideView: View {
                         Text("The row says what to do next, such as opening Cursor or running grok login. A Cursor or Grok change can also blank a bar until this app is updated. Quit is in the menu header. There is no Dock icon.")
                     }
                     section("Privacy") {
-                        Text("The app reads the Cursor and grok CLI sign-ins already on this Mac without changing them, and Grok.app’s only if you opt in, and uses them only to ask Cursor and xAI for your usage. If iCloud is enabled, the latest usage numbers, never your sign-ins, go to your own iCloud for the iPhone app. The project runs no server and includes no analytics or tracking.")
+                        Text("The app reads the Cursor and grok CLI sign-ins already on this Mac, plus Grok.app’s if you opt in. It never changes them, and uses them only to ask Cursor and xAI for your usage. If iCloud is enabled, the latest usage numbers, never your sign-ins, go to your own iCloud for the iPhone app. The project runs no server and includes no analytics or tracking.")
                     }
                 }
                 .padding(.horizontal, MenuMetrics.points(20, scale: scale))

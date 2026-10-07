@@ -248,7 +248,7 @@ struct UsageMenuView: View {
                             guard enabled else { return }
                             Task { await notifier.requestAuthorizationIfNeeded() }
                         }
-                    Text("Notifies you, at most once per pool each day, when a pool climbs \(QuotaBurnEvaluator.dailyPercentText) or more since your first reading that day.")
+                    Text("Notifies you, at most once per pool each day, when a pool climbs \(Int((QuotaBurnEvaluator.dailyFractionThreshold * 100).rounded())) points or more since your first reading that day.")
                         .font(MenuMetrics.font(13, scale: scale))
                         .foregroundStyle(LiquidGlass.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
