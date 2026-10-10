@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2] - 2026-10-10
+
+### Fixed
+
+- Send Feedback no longer opens a browser tab when this Mac’s default email app is a browser. It shows kevinlogan@mail.grokbot.com, with Copy Address and Open Mail Draft Anyway, and explains how to choose a mail app: Mail > Settings > General > Default email reader. If a mail app is already the default, it still opens a draft. Nothing is sent until you send it yourself. On iPhone, if a draft cannot be opened, the address is shown so you can copy it.
+
 ## [1.1] - 2026-10-10
 
 ### Added
@@ -26,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Spike Alerts start over when a pool resets during the day. A drop in usage, or a new billing period, becomes the new baseline, so later climbs are not measured against the reading from before the reset.
 - Grok usage reads the installed grok CLI version when it can, and falls back to the built-in version when it cannot. If xAI rejects that version as outdated, the app tries once more with a newer version, or the Grok row tells you to run `grok update` and then Refresh.
 
-[Unreleased]: https://github.com/KevinLogan84/grok-cursor-usage/compare/v1.1...HEAD
+[Unreleased]: https://github.com/KevinLogan84/grok-cursor-usage/compare/v1.2...HEAD
+[1.2]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.2
 [1.1]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.1
 [1.0]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.0

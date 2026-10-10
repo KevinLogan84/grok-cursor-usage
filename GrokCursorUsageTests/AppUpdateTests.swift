@@ -169,8 +169,8 @@ struct AppUpdateTests {
     }
 
     @Test
-    func marketingVersionIs1_1() {
-        #expect(AppUpdate.marketingVersion() == "1.1")
+    func marketingVersionIs1_2() {
+        #expect(AppUpdate.marketingVersion() == "1.2")
     }
 }
 

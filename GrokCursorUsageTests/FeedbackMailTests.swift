@@ -68,6 +68,78 @@ struct FeedbackMailTests {
         #expect(queryValue(url, "subject") == FeedbackMail.subject)
         #expect(queryNames(url) == ["subject", "body"])
     }
+
+    @Test
+    func mailtoHandlerKindIsBrowserMailAppOrMissing() {
+        let browsers = [
+            "com.google.Chrome",
+            "com.apple.Safari",
+            "org.mozilla.firefox",
+            "com.microsoft.edgemac",
+            "com.brave.Browser",
+            "company.thebrowser.Browser",
+        ]
+        #expect(FeedbackMail.browserBundleIdentifiers == Set(browsers))
+        for bundleID in browsers {
+            #expect(FeedbackMail.handlerKind(bundleIdentifier: bundleID) == .browser)
+        }
+        #expect(FeedbackMail.handlerKind(bundleIdentifier: " com.apple.Safari ") == .browser)
+        #expect(FeedbackMail.shouldOfferCopyFallback(.browser))
+
+        let mailApps = [
+            "com.apple.mail",
+            "com.microsoft.Outlook",
+            "com.readdle.smartemail-Mac",
+            "com.example.Mailer",
+        ]
+        for bundleID in mailApps {
+            #expect(FeedbackMail.handlerKind(bundleIdentifier: bundleID) == .mailApp)
+            #expect(!FeedbackMail.browserBundleIdentifiers.contains(bundleID))
+        }
+        #expect(!FeedbackMail.shouldOfferCopyFallback(.mailApp))
+
+        let missingIdentifiers: [String?] = [nil, "", "   "]
+        for missing in missingIdentifiers {
+            #expect(FeedbackMail.handlerKind(bundleIdentifier: missing) == .missing)
+        }
+        #expect(FeedbackMail.shouldOfferCopyFallback(.missing))
+    }
+
+    @Test
+    func missingMailtoApplicationOffersCopyFallback() {
+        #expect(FeedbackMail.handlerKind(
+            applicationURL: nil,
+            bundleIdentifier: { _ in "com.apple.mail" }
+        ) == .missing)
+
+        let chrome = URL(fileURLWithPath: "/Applications/Google Chrome.app")
+        let chromeKind = FeedbackMail.handlerKind(applicationURL: chrome, bundleIdentifier: { _ in "com.google.Chrome" })
+        #expect(chromeKind == .browser)
+        #expect(FeedbackMail.shouldOfferCopyFallback(chromeKind))
+
+        let mail = URL(fileURLWithPath: "/System/Applications/Mail.app")
+        #expect(FeedbackMail.handlerKind(applicationURL: mail, bundleIdentifier: { _ in "com.apple.mail" }) == .mailApp)
+        #expect(FeedbackMail.handlerKind(applicationURL: mail, bundleIdentifier: { _ in "com.microsoft.Outlook" }) == .mailApp)
+        #expect(FeedbackMail.handlerKind(applicationURL: mail, bundleIdentifier: { _ in nil }) == .missing)
+        #expect(FeedbackMail.handlerKind(applicationURL: mail, bundleIdentifier: { _ in "  " }) == .missing)
+
+        let absent = URL(fileURLWithPath: "/Applications/DoesNotExist.app")
+        #expect(FeedbackMail.handlerKind(applicationURL: absent) == .missing)
+    }
+
+    @Test
+    func feedbackFallbackCopyNamesTheAddressAndHowToChangeTheDefault() {
+        #expect(FeedbackMail.copyAddressButtonTitle == "Copy Address")
+        #expect(FeedbackMail.openAnywayButtonTitle == "Open Mail Draft Anyway")
+        let note = FeedbackMail.macHandlerExplanation
+        #expect(!note.contains("\n"))
+        #expect(note.contains("default email app seems to be a browser"))
+        #expect(note.contains("Mail > Settings > General > Default email reader"))
+        #expect(FeedbackMail.handlerExplanation == note)
+        #expect(!FeedbackMail.iosHandlerExplanation.contains("\n"))
+        #expect(FeedbackMail.iosHandlerExplanation.contains("Copy the address"))
+        #expect(!FeedbackMail.iosHandlerExplanation.contains("Default email reader"))
+    }
 }
 
 private func nonEmpty(_ value: String?) -> String? {

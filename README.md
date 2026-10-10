@@ -94,7 +94,7 @@ The project runs no server and includes no analytics or tracking.
 
 The iPhone viewer is not in the Mac download. Build it from source.
 
-The **GrokCursorUsageIOS** target is read-only. It never signs in to Cursor or Grok. It shows the last snapshot the Mac app wrote to your iCloud. **Send Feedback** at the bottom of the screen opens a mail draft the same way the Mac app does, with the iOS version instead of the macOS version. The iPhone app does not check for updates.
+The **GrokCursorUsageIOS** target is read-only. It never signs in to Cursor or Grok. It shows the last snapshot the Mac app wrote to your iCloud. **Send Feedback** at the bottom of the screen opens a mail draft the same way the Mac app does, with the iOS version instead of the macOS version. If a draft cannot be opened, it shows the address so you can copy it. The iPhone app does not check for updates.
 
 Building it takes a paid Apple Developer Program membership, your own bundle IDs, and your own iCloud container.
 
@@ -165,7 +165,9 @@ Questions, bugs or ideas? Email [kevinlogan@mail.grokbot.com](mailto:kevinlogan@
 
 **Send Feedback** is at the bottom of **Settings**, and again at the end of the in-app **Guide**. It opens a draft in your mail app to that address. The subject is “Grok & Cursor Usage feedback”. The draft includes the app version, the build, and the macOS version. It does not include usage, sign-ins, or account names. Nothing is sent until you send the draft yourself.
 
-The iPhone viewer has the same button at the bottom of the screen. Its draft includes the iOS version instead of the macOS version.
+If this Mac’s default email app is a browser, or none is set, Send Feedback does not open a browser tab. It shows the address, **Copy Address**, and **Open Mail Draft Anyway**. The note tells you how to pick a mail app: Mail > Settings > General > Default email reader.
+
+The iPhone viewer has the same button at the bottom of the screen. Its draft includes the iOS version instead of the macOS version. If a draft cannot be opened, it shows the address and **Copy Address**.
 
 ## Contributing
 

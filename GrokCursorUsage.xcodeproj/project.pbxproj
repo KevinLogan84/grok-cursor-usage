@@ -461,7 +461,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.app;
 				PRODUCT_MODULE_NAME = GrokCursorUsage;
 				PRODUCT_NAME = "Grok & Cursor Usage";
@@ -489,7 +489,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.app;
 				PRODUCT_MODULE_NAME = GrokCursorUsage;
 				PRODUCT_NAME = "Grok & Cursor Usage";
@@ -516,7 +516,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.ios;
 				PRODUCT_MODULE_NAME = GrokCursorUsageIOS;
 				PRODUCT_NAME = "Grok & Cursor Usage";
@@ -546,7 +546,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.ios;
 				PRODUCT_MODULE_NAME = GrokCursorUsageIOS;
 				PRODUCT_NAME = "Grok & Cursor Usage";
@@ -570,7 +570,7 @@
 				DEVELOPMENT_TEAM = KVVL57G45T;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_STRICT_CONCURRENCY = complete;
@@ -589,7 +589,7 @@
 				DEVELOPMENT_TEAM = KVVL57G45T;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_STRICT_CONCURRENCY = complete;
