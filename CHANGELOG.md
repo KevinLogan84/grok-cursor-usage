@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1] - 2026-10-10
+
+### Added
+
+- Send Feedback, in Settings and at the end of the Guide, opens a draft in your mail app. The subject is "Grok & Cursor Usage feedback". The draft includes the app version, the build, and the macOS version. It does not include usage, sign-ins, or account names. Nothing is sent until you send it yourself. The iPhone viewer has the same button at the bottom of the screen.
+- When a newer version is published, the top of the menu says Update available. Update opens what's new in that version. Download opens the new copy. Quit the app and replace Grok & Cursor Usage.app in /Applications. The app checks when you open it, and then at most once a day. The check sends no personal data, stays quiet when you are offline, and does not install the update for you.
+
 ## [1.0] - 2026-10-07
 
 ### Added
@@ -19,5 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Spike Alerts start over when a pool resets during the day. A drop in usage, or a new billing period, becomes the new baseline, so later climbs are not measured against the reading from before the reset.
 - Grok usage reads the installed grok CLI version when it can, and falls back to the built-in version when it cannot. If xAI rejects that version as outdated, the app tries once more with a newer version, or the Grok row tells you to run `grok update` and then Refresh.
 
-[Unreleased]: https://github.com/KevinLogan84/grok-cursor-usage/compare/v1.0...HEAD
+[Unreleased]: https://github.com/KevinLogan84/grok-cursor-usage/compare/v1.1...HEAD
+[1.1]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.1
 [1.0]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.0

@@ -49,10 +49,21 @@ struct GuideView: View {
                         bullet("Refresh", "The phone updates when iCloud delivers a new snapshot. Refresh asks iCloud again. The iPhone target requires iOS 26.")
                     }
                     section("If a bar stays blank") {
-                        Text("The row says what to do next, such as opening Cursor, running grok login, or running grok update. A Cursor or Grok change can also blank a bar until this app is updated: quit from the menu header, download the new release, and replace Grok & Cursor Usage.app in /Applications. There is no Dock icon.")
+                        Text("The row says what to do next, such as opening Cursor, running grok login, or running grok update. A Cursor or Grok change can also blank a bar until this app is updated: quit from the menu header, download the new release, and replace Grok & Cursor Usage.app in /Applications. If the menu shows Update, that is the new copy. There is no Dock icon.")
                     }
+                    section("Updates") {
+                        Text("When a newer version is published, the top of the menu says Update available. Update opens what’s new in that version. Download opens the new copy. Quit the app, then replace Grok & Cursor Usage.app in /Applications. The check runs when you open the app, and then at most once a day. It asks GitHub whether a public release is newer. It sends no usage, sign-in, or account name, and it stays quiet if you are offline. The app does not install the update for you.")
+                    }
+                    section("Feedback") {
+                        Text("Send Feedback opens a draft in your mail app. The subject is already filled in. The draft includes this app’s version and build, and this Mac’s macOS version. Usage, sign-ins, and account names are left out. Nothing is sent until you send the draft yourself.")
+                    }
+                    Button(FeedbackMail.buttonTitle) {
+                        FeedbackMail.openDraft()
+                    }
+                    .glassPlainButton(compact: true)
+                    .accessibilityHint("Opens a mail draft. Nothing is sent until you send it.")
                     section("Privacy") {
-                        Text("The app reads the Cursor and grok CLI sign-ins already on this Mac, plus Grok.app’s if you opt in. It never changes them, and uses them only to ask Cursor and xAI for your usage. If iCloud is enabled, the latest usage numbers, never your sign-ins, go to your own iCloud for the iPhone app. The project runs no server and includes no analytics or tracking.")
+                        Text("The app reads the Cursor and grok CLI sign-ins already on this Mac, plus Grok.app’s if you opt in. It never changes them, and uses them only to ask Cursor and xAI for your usage. If iCloud is enabled, the latest usage numbers, never your sign-ins, go to your own iCloud for the iPhone app. The project runs no server and includes no analytics or tracking. Send Feedback only opens a draft in your mail app. The update check only asks GitHub if a newer public release exists.")
                     }
                 }
                 .padding(.horizontal, MenuMetrics.points(20, scale: scale))

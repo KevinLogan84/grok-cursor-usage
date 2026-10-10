@@ -20,7 +20,9 @@ struct UsageMenuView: View {
     @Bindable var appearance: AppearancePreferenceStore
     @Bindable var notifier: QuotaAlertNotifier
     @Bindable var grokSource: GrokSignInSourceStore
+    @Bindable var updates: AppUpdateChecker
     var onShowGuide: () -> Void
+    var onShowUpdate: () -> Void
     var onLayout: () -> Void = {}
 
     @State private var tab: MenuTab = .usage
@@ -30,6 +32,9 @@ struct UsageMenuView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MenuMetrics.points(12, scale: scale)) {
             header
+            if let notice = updates.notice {
+                updateBanner(notice)
+            }
             Picker("Section", selection: $tab) {
                 ForEach(MenuTab.allCases) { page in
                     Text(page.title).tag(page)
@@ -56,6 +61,7 @@ struct UsageMenuView: View {
         }
         .onChange(of: tab) { _, _ in onLayout() }
         .onChange(of: appearance.interfaceScale) { _, _ in onLayout() }
+        .onChange(of: updates.notice) { _, _ in onLayout() }
     }
 
     private var header: some View {
@@ -308,9 +314,35 @@ struct UsageMenuView: View {
                     Button("Guide", action: onShowGuide)
                         .glassPlainButton(compact: true)
                     Spacer(minLength: MenuMetrics.points(8, scale: scale))
+                    Button(FeedbackMail.buttonTitle) {
+                        FeedbackMail.openDraft()
+                    }
+                    .glassPlainButton(compact: true)
+                    .accessibilityHint("Opens a mail draft. Nothing is sent until you send it.")
                 }
+                Text("Send Feedback opens a mail draft. Nothing is sent until you send it.")
+                    .font(MenuMetrics.font(13, scale: scale))
+                    .foregroundStyle(LiquidGlass.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func updateBanner(_ notice: AppUpdateNotice) -> some View {
+        HStack(alignment: .center, spacing: MenuMetrics.points(8, scale: scale)) {
+            VStack(alignment: .leading, spacing: MenuMetrics.points(2, scale: scale)) {
+                Text("Update available")
+                    .font(MenuMetrics.font(14, scale: scale, weight: .semibold))
+                    .foregroundStyle(LiquidGlass.textPrimary)
+                Text("\(notice.versionLabel) is ready.")
+                    .font(MenuMetrics.font(13, scale: scale))
+                    .foregroundStyle(LiquidGlass.textSecondary)
+            }
+            Spacer(minLength: MenuMetrics.points(8, scale: scale))
+            Button("Update", action: onShowUpdate)
+                .glassPlainButton(compact: true)
+                .accessibilityHint("Shows what’s new and where to download it")
         }
     }
 

@@ -10,6 +10,7 @@ final class AppModel {
     let notifier: QuotaAlertNotifier
     let quotas: QuotaMonitor
     let snapshots: QuotaSnapshotPublisher
+    let updates = AppUpdateChecker()
 
     init() {
         let notifier = QuotaAlertNotifier()
@@ -18,6 +19,7 @@ final class AppModel {
         snapshots = QuotaSnapshotPublisher(quotas: quotas)
         quotas.start()
         snapshots.start()
+        updates.start()
     }
 }
 
@@ -51,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model?.snapshots.flush()
         model?.quotas.stop()
         model?.snapshots.stop()
+        model?.updates.stop()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

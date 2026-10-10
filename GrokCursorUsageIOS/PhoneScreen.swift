@@ -66,6 +66,7 @@ struct PhoneScreen: View {
                 } else {
                     emptyState
                 }
+                feedbackFooter
             }
             .padding(.horizontal, IOSGlass.screenHorizontalPadding)
             .padding(.top, IOSGlass.screenTopPadding)
@@ -162,6 +163,24 @@ struct PhoneScreen: View {
                 refreshFeedback = nil
             }
         }
+    }
+
+    private var feedbackFooter: some View {
+        VStack(spacing: 4) {
+            Button(FeedbackMail.buttonTitle) {
+                FeedbackMail.openDraft()
+            }
+            .font(.footnote.weight(.semibold))
+            .buttonStyle(.borderless)
+            .accessibilityHint("Opens a mail draft. Nothing is sent until you send it.")
+            Text("Opens a mail draft. Nothing is sent until you send it.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .accessibilityHidden(true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 4)
     }
 
     private var statusLine: String {
