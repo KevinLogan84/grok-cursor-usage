@@ -49,6 +49,7 @@ final class StatusBarController {
     private var menuPanel: NSPanel?
     private var menuHosting: NSHostingController<UsageMenuView>?
     private var guideWindow: NSWindow?
+    private var releaseNotesWindow: NSWindow?
     private nonisolated(unsafe) var updateTimer: Timer?
     private nonisolated(unsafe) var localMouseMonitor: Any?
     private nonisolated(unsafe) var globalMouseMonitor: Any?
@@ -108,6 +109,8 @@ final class StatusBarController {
         menuPanel?.contentView?.appearance = appearance
         guideWindow?.appearance = appearance
         guideWindow?.contentView?.appearance = appearance
+        releaseNotesWindow?.appearance = appearance
+        releaseNotesWindow?.contentView?.appearance = appearance
     }
 
     private func configureStatusButton() {
@@ -152,9 +155,14 @@ final class StatusBarController {
             appearance: model.appearance,
             notifier: model.notifier,
             grokSource: model.grokSource,
+            updates: model.updates,
             onShowGuide: { [weak self] in
                 self?.closeMenu()
                 self?.showGuide()
+            },
+            onShowUpdate: { [weak self] in
+                self?.closeMenu()
+                self?.showReleaseNotes()
             },
             onLayout: { [weak self] in
                 self?.scheduleReflow()
@@ -336,6 +344,40 @@ final class StatusBarController {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
         guideWindow = window
+    }
+
+    private func showReleaseNotes() {
+        guard let notice = model.updates.notice else { return }
+        if let releaseNotesWindow, releaseNotesWindow.isVisible {
+            releaseNotesWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            return
+        }
+        let hosting = NSHostingController(
+            rootView: ReleaseNotesView(appearance: model.appearance, notice: notice) { [weak self] in
+                self?.releaseNotesWindow?.close()
+            }
+        )
+        let scale = model.appearance.interfaceScale
+        let window = NSWindow(
+            contentRect: NSRect(
+                x: 0,
+                y: 0,
+                width: MenuMetrics.points(480, scale: scale),
+                height: MenuMetrics.points(520, scale: scale)
+            ),
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "What’s new in \(notice.versionLabel)"
+        window.isReleasedWhenClosed = false
+        window.contentViewController = hosting
+        LiquidGlass.applyChrome(to: window, appearance: model.appearance.resolvedNSAppearance)
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+        releaseNotesWindow = window
     }
 
     private static let statusValueFontSize: CGFloat = 10.5

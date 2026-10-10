@@ -8,7 +8,8 @@ A macOS menu bar app that shows how much of your Cursor and Grok plan you have u
 - **Every pool in one menu.** Cursor Auto, Cursor API, Grok, and Grok Bot. When a service reports your plan name, such as Cursor Pro or SuperGrok, that becomes the title. Pools your account does not have are left off. Grok Bot still appears, with what to do, when Cursor is signed out.
 - **Pace.** Each bar says whether you are over, under, or on pace for its billing period, and when it resets.
 - **Spike Alerts.** An optional notification when a pool climbs during the day. Choose once or at every step, and set the step from 5% to 50%.
-- **Settings.** Text size from 75% to 125%, System, Light, or Dark appearance, and Open at Login.
+- **Settings.** Text size from 75% to 125%, System, Light, or Dark appearance, Open at Login, and Send Feedback.
+- **Updates.** The app tells you when a new version is out. You download it and replace the app. It does not install the update for you.
 - **No account of its own.** It uses the Cursor and Grok sign-ins already on your Mac.
 
 Changes are recorded in the [changelog](CHANGELOG.md).
@@ -35,7 +36,13 @@ The iPhone viewer is not in the zip. It is still [build from source](#build-from
 
 Leave **Grok & Cursor Usage.app** in `/Applications` and turn on **Open at Login** in **Settings**. The menu bar item stays up while the app is running. There is no Dock icon. Login items need the copy in `/Applications`.
 
-To update, quit the app, download the new [release](https://github.com/KevinLogan84/grok-cursor-usage/releases/latest), and replace **Grok & Cursor Usage.app** in `/Applications`.
+The menu shows **Update** when a newer release is out. Quit the app, download the new copy, and replace **Grok & Cursor Usage.app** in `/Applications`.
+
+## Updates
+
+The app checks for a new release when it opens, and then at most once a day. It asks GitHub, unauthenticated, and sends no personal data. If you are offline, or GitHub does not answer, nothing is shown.
+
+When a newer version is available, the top of the menu says **Update available**. **Update** opens what’s new in that version. **Download** opens the new copy: the `Grok-Cursor-Usage-macOS.zip` on that release, or the release page if the zip is not there. The app does not install it. Quit, then replace **Grok & Cursor Usage.app** in `/Applications`.
 
 ## Sign-ins it uses
 
@@ -57,7 +64,8 @@ The `GROK_HOME` and `GROK_AUTH_JSON` environment variables are honored, but an a
 - The **Usage** tab lists every pool with its reset date. If a pool cannot be read, its row says what to do next.
 - Pace compares percent used with how much of that pool’s period has passed.
 - **Spike Alerts** watches each pool against its first reading today. If a pool resets during the day, the count starts over from the reading after that reset. **Once** notifies a single time when a pool climbs by the amount you set. **Every** notifies again at each further step. The amount moves in steps of 5%, from 5% to 50%, and starts at 15%. The day follows your Mac’s time zone. macOS asks for notification permission when you turn it on. If you declined, the **Settings** tab shows **Open Notification Settings**.
-- The **Settings** tab holds Text Size, Appearance, Grok Sign-In, Open at Login, Spike Alerts, and the in-app **Guide**.
+- The **Settings** tab holds Text Size, Appearance, Grok Sign-In, Open at Login, Spike Alerts, the in-app **Guide**, and **Send Feedback**.
+- When a newer release is out, **Update** appears at the top of the menu, on both the Usage and Settings tabs.
 - **Quit** is in the menu header.
 
 ## Troubleshooting
@@ -72,21 +80,21 @@ The `GROK_HOME` and `GROK_AUTH_JSON` environment variables are honored, but an a
 
 **Grok says to update the CLI.** xAI rejected the grok CLI version. Run `grok update` in Terminal, then click **Refresh**.
 
-**A bar went blank after it used to work.** Cursor and xAI do not publish these usage endpoints, so a change on their side can break a bar. Quit the app, download the latest [release](https://github.com/KevinLogan84/grok-cursor-usage/releases/latest), and replace **Grok & Cursor Usage.app** in `/Applications`. If you built from source, pull the latest code and run it again. You can also [open an issue](https://github.com/KevinLogan84/grok-cursor-usage/issues).
+**A bar went blank after it used to work.** Cursor and xAI do not publish these usage endpoints, so a change on their side can break a bar. Quit the app, download the latest [release](https://github.com/KevinLogan84/grok-cursor-usage/releases/latest), and replace **Grok & Cursor Usage.app** in `/Applications`. If the menu shows **Update**, that opens the new copy. If you built from source, pull the latest code and run it again. You can also [open an issue](https://github.com/KevinLogan84/grok-cursor-usage/issues).
 
 ## Privacy
 
 The project runs no server and includes no analytics or tracking.
 
 - **What it reads:** Cursor’s local database (`state.vscdb`), the grok CLI’s `auth.json`, and the installed grok CLI version when that metadata or the `grok` command is available. Grok.app’s cookie file is read only if you choose **CLI + Grok.app** and grant Full Disk Access. It does not change any of these files.
-- **Where it connects:** Cursor (`api2.cursor.sh`) and xAI (`grok.com`, `auth.x.ai`), using those sign-ins to request your usage.
-- **What it stores:** Settings and alert state in the app’s preferences. If iCloud is enabled, the latest usage numbers go to your own iCloud key-value store for the iPhone viewer. Sign-in tokens are never written to iCloud.
+- **Where it connects:** Cursor (`api2.cursor.sh`) and xAI (`grok.com`, `auth.x.ai`), using those sign-ins to request your usage. It also asks GitHub (`api.github.com`) whether a newer public release exists. That request is unauthenticated and includes no usage, sign-in, or account name.
+- **What it stores:** Settings and alert state in the app’s preferences. If iCloud is enabled, the latest usage numbers go to your own iCloud key-value store for the iPhone viewer. Sign-in tokens are never written to iCloud. The update check stores when it last looked, and the public release note if a newer version is available.
 
 ## iPhone viewer (optional)
 
 The iPhone viewer is not in the Mac download. Build it from source.
 
-The **GrokCursorUsageIOS** target is read-only. It never signs in to Cursor or Grok. It shows the last snapshot the Mac app wrote to your iCloud.
+The **GrokCursorUsageIOS** target is read-only. It never signs in to Cursor or Grok. It shows the last snapshot the Mac app wrote to your iCloud. **Send Feedback** at the bottom of the screen opens a mail draft the same way the Mac app does, with the iOS version instead of the macOS version. The iPhone app does not check for updates.
 
 Building it takes a paid Apple Developer Program membership, your own bundle IDs, and your own iCloud container.
 
@@ -154,6 +162,10 @@ xcodebuild test -project GrokCursorUsage.xcodeproj -scheme GrokCursorUsage -dest
 ## Feedback
 
 Questions, bugs or ideas? Email [kevinlogan@mail.grokbot.com](mailto:kevinlogan@mail.grokbot.com), or open an issue on GitHub.
+
+**Send Feedback** is at the bottom of **Settings**, and again at the end of the in-app **Guide**. It opens a draft in your mail app to that address. The subject is “Grok & Cursor Usage feedback”. The draft includes the app version, the build, and the macOS version. It does not include usage, sign-ins, or account names. Nothing is sent until you send the draft yourself.
+
+The iPhone viewer has the same button at the bottom of the screen. Its draft includes the iOS version instead of the macOS version.
 
 ## Contributing
 
