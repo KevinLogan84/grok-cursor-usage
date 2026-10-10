@@ -314,13 +314,10 @@ struct UsageMenuView: View {
                     Button("Guide", action: onShowGuide)
                         .glassPlainButton(compact: true)
                     Spacer(minLength: MenuMetrics.points(8, scale: scale))
-                    Button(FeedbackMail.buttonTitle) {
-                        FeedbackMail.openDraft()
-                    }
-                    .glassPlainButton(compact: true)
-                    .accessibilityHint("Opens a mail draft. Nothing is sent until you send it.")
+                    SendFeedbackButton()
+                        .glassPlainButton(compact: true)
                 }
-                Text("Send Feedback opens a mail draft. Nothing is sent until you send it.")
+                Text("Send Feedback opens a mail draft. If this Mac’s default email app is a browser, the address is shown so you can copy it. Nothing is sent until you send it.")
                     .font(MenuMetrics.font(13, scale: scale))
                     .foregroundStyle(LiquidGlass.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)

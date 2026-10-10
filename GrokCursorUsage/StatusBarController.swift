@@ -299,6 +299,11 @@ final class StatusBarController {
             let buttonScreenRect = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
             if buttonScreenRect.contains(screenPoint) { return }
         }
+        // The feedback popover is its own window. A click there is not outside
+        // the menu, or the menu would close before Copy Address could run.
+        if NSApp.windows.contains(where: { $0.isVisible && $0.frame.contains(screenPoint) }) {
+            return
+        }
         closeMenu()
     }
 

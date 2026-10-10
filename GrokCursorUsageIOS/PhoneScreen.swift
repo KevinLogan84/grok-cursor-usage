@@ -167,17 +167,14 @@ struct PhoneScreen: View {
 
     private var feedbackFooter: some View {
         VStack(spacing: 4) {
-            Button(FeedbackMail.buttonTitle) {
-                FeedbackMail.openDraft()
-            }
-            .font(.footnote.weight(.semibold))
-            .buttonStyle(.borderless)
-            .accessibilityHint("Opens a mail draft. Nothing is sent until you send it.")
-            Text("Opens a mail draft. Nothing is sent until you send it.")
+            SendFeedbackButton()
+                .font(.footnote.weight(.semibold))
+                .buttonStyle(.borderless)
+            Text("Opens a mail draft. If that can’t open, the address is shown so you can copy it. Nothing is sent until you send it.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .accessibilityHidden(true)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 4)
