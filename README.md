@@ -151,6 +151,10 @@ xcodebuild test -project GrokCursorUsage.xcodeproj -scheme GrokCursorUsage -dest
   -only-testing:GrokCursorUsageTests CODE_SIGNING_ALLOWED=NO
 ```
 
+## Feedback
+
+Questions, bugs or ideas? Email [kevinlogan@mail.grokbot.com](mailto:kevinlogan@mail.grokbot.com), or open an issue on GitHub.
+
 ## Contributing
 
 Issues and pull requests are welcome. Please run the tests before opening a pull request. Leave your own team, bundle ID, and iCloud container changes out of it, and never commit tokens or cookies.
