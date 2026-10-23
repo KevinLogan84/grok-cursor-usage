@@ -83,7 +83,7 @@ struct UsageMenuView: View {
                     .controlSize(.regular)
             }
             Button("Refresh") {
-                Task { await quotas.refresh() }
+                Task { await quotas.refresh(userInitiated: true) }
             }
             .glassPlainButton(compact: true)
             .keyboardShortcut("r")

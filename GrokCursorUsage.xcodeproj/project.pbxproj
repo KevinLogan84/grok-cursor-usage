@@ -42,6 +42,7 @@
 		B00000000000000000000088 /* ReleaseNotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000087 /* ReleaseNotesView.swift */; };
 		B0000000000000000000008A /* FeedbackMailTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B00000000000000000000089 /* FeedbackMailTests.swift */; };
 		B0000000000000000000008C /* AppUpdateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000008B /* AppUpdateTests.swift */; };
+		B0000000000000000000008D /* CursorSafeStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0000000000000000000008E /* CursorSafeStorage.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -87,6 +88,7 @@
 		B00000000000000000000087 /* ReleaseNotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotesView.swift; sourceTree = "<group>"; };
 		B00000000000000000000089 /* FeedbackMailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackMailTests.swift; sourceTree = "<group>"; };
 		B0000000000000000000008B /* AppUpdateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUpdateTests.swift; sourceTree = "<group>"; };
+		B0000000000000000000008E /* CursorSafeStorage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorSafeStorage.swift; sourceTree = "<group>"; };
 		B00000000000000000000048 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B00000000000000000000049 /* GrokCursorUsage.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GrokCursorUsage.entitlements; sourceTree = "<group>"; };
 		B0000000000000000000004A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -126,6 +128,7 @@
 				B0000000000000000000001E /* LaunchAtLoginManager.swift */,
 				B00000000000000000000020 /* QuotaAlertNotifier.swift */,
 				B00000000000000000000022 /* QuotaClients.swift */,
+				B0000000000000000000008E /* CursorSafeStorage.swift */,
 				B00000000000000000000024 /* QuotaMonitor.swift */,
 				B00000000000000000000026 /* QuotaSnapshotPublisher.swift */,
 				B00000000000000000000085 /* AppUpdateChecker.swift */,
@@ -354,6 +357,7 @@
 				B0000000000000000000001D,
 				B0000000000000000000001F,
 				B00000000000000000000021,
+				B0000000000000000000008D,
 				B00000000000000000000023,
 				B00000000000000000000025,
 				B00000000000000000000027,
@@ -461,7 +465,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.app;
 				PRODUCT_MODULE_NAME = GrokCursorUsage;
 				PRODUCT_NAME = "Grok & Cursor Usage";
@@ -489,7 +493,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.app;
 				PRODUCT_MODULE_NAME = GrokCursorUsage;
 				PRODUCT_NAME = "Grok & Cursor Usage";
@@ -516,7 +520,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.ios;
 				PRODUCT_MODULE_NAME = GrokCursorUsageIOS;
 				PRODUCT_NAME = "Grok & Cursor Usage";
@@ -546,7 +550,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.ios;
 				PRODUCT_MODULE_NAME = GrokCursorUsageIOS;
 				PRODUCT_NAME = "Grok & Cursor Usage";
@@ -570,7 +574,7 @@
 				DEVELOPMENT_TEAM = KVVL57G45T;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_STRICT_CONCURRENCY = complete;
@@ -589,7 +593,7 @@
 				DEVELOPMENT_TEAM = KVVL57G45T;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.grokcursorusage.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_STRICT_CONCURRENCY = complete;

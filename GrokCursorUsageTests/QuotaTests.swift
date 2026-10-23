@@ -3,6 +3,9 @@ import Foundation
 import SwiftUI
 import Testing
 import UserNotifications
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import GrokCursorUsage
 
 struct QuotaTests {
@@ -363,6 +366,7 @@ struct QuotaTests {
 
         let token = try #require(CursorStateStore.string(forKey: "cursorAuth/accessToken", database: db))
         #expect(token == "cursor-only")
+        #expect(CursorStateStore.readAccessToken(database: db) == .token("cursor-only"))
         let rows = CursorStateStore.rows(
             sql: "SELECT key, value FROM ItemTable WHERE key LIKE 'mcpOAuth.global.%';",
             database: db
@@ -498,7 +502,7 @@ struct QuotaTests {
         defer { defaults.removePersistentDomain(forName: suite) }
 
         let sources = QuotaRefreshSources(
-            periodUsage: { period },
+            periodUsage: { .success(period) },
             sandUsage: { .payload(sand) },
             grokBilling: { .usage(grok) },
             hasGrokSession: { true }
@@ -881,10 +885,17 @@ struct QuotaTests {
 
         let rejected = Data(#"{"error":"unauthenticated"}"#.utf8)
         #expect(CursorAccessToken.payloadRejectsSignIn(rejected))
-        #expect(SandUsageFetch.from(.success(rejected)) == .needsSignIn)
-        #expect(SandUsageFetch.from(.noToken) == .needsSignIn)
-        #expect(SandUsageFetch.from(.expired) == .needsSignIn)
-        #expect(SandUsageFetch.from(.failed) == .failed)
+        #expect(
+            SandUsageFetch.from(.success(rejected))
+                == .expired(CursorServerRejection(statusCode: 200, serverMessage: "unauthenticated"))
+        )
+        #expect(SandUsageFetch.from(.noToken) == .noToken)
+        #expect(SandUsageFetch.from(.expired(nil)) == .expired(nil))
+        #expect(SandUsageFetch.from(.failed(nil)) == .failed(nil))
+        #expect(SandUsageFetch.from(.timedOut) == .timedOut)
+        #expect(SandUsageFetch.from(.keychainDenied) == .keychainDenied)
+        #expect(SandUsageFetch.from(.keychainMissing) == .keychainMissing)
+        #expect(SandUsageFetch.from(.keychainLocked) == .keychainLocked)
 
         let allowance = Data(#"{"usagePercent":12}"#.utf8)
         #expect(!CursorAccessToken.payloadRejectsSignIn(allowance))
@@ -894,8 +905,8 @@ struct QuotaTests {
     @Test @MainActor
     func grokBotRowExplainsAMissingCursorSignInAndHidesARealMiss() async {
         let signedOut = QuotaRefreshSources(
-            periodUsage: { nil },
-            sandUsage: { .needsSignIn },
+            periodUsage: { .noToken },
+            sandUsage: { .noToken },
             grokBilling: { .unavailable },
             hasGrokSession: { false }
         )
@@ -903,14 +914,19 @@ struct QuotaTests {
         defer { UserDefaults(suiteName: signedOutSuite)?.removePersistentDomain(forName: signedOutSuite) }
         await signedOutMonitor.refresh()
         let bot = signedOutMonitor.bars.first { $0.kind == .grokBot }
-        #expect(bot?.detail == QuotaUnavailableCopy.grokBotNeedsCursorSignIn)
-        #expect(bot?.state == .unavailable(QuotaUnavailableCopy.grokBotNeedsCursorSignIn))
+        #expect(bot?.detail == "Open Cursor once so this Mac can read usage")
+        #expect(bot?.detail == QuotaUnavailableCopy.grokBotNoToken)
+        #expect(bot?.state == .unavailable(QuotaUnavailableCopy.grokBotNoToken))
         let cursor = signedOutMonitor.bars.first { $0.kind == .cursorModels }
         #expect(cursor?.detail == "Open Cursor once so this Mac can read usage")
+        #expect(cursor?.title == "Cursor Auto")
+        let api = signedOutMonitor.bars.first { $0.kind == .otherModels }
+        #expect(api?.detail == QuotaUnavailableCopy.cursorNoToken)
+        #expect(api?.title == "Cursor API")
 
         let failed = QuotaRefreshSources(
-            periodUsage: { nil },
-            sandUsage: { .failed },
+            periodUsage: { .failed(nil) },
+            sandUsage: { .failed(nil) },
             grokBilling: { .unavailable },
             hasGrokSession: { false }
         )
@@ -919,7 +935,15 @@ struct QuotaTests {
         await failedMonitor.refresh()
         #expect(
             failedMonitor.bars.first { $0.kind == .grokBot }?.detail
-                == QuotaUnavailableCopy.grokBotUnavailable
+                == QuotaUnavailableCopy.grokBotUnreachable
+        )
+        #expect(
+            failedMonitor.bars.first { $0.kind == .cursorModels }?.detail
+                == QuotaUnavailableCopy.cursorUnreachable
+        )
+        #expect(
+            failedMonitor.bars.first { $0.kind == .cursorModels }?.detail
+                != "Open Cursor once so this Mac can read usage"
         )
 
         let period = """
@@ -927,7 +951,7 @@ struct QuotaTests {
         """.data(using: .utf8)!
         let noAllowance = Data(#"{"enabled":false,"usagePercent":4}"#.utf8)
         let signedIn = QuotaRefreshSources(
-            periodUsage: { period },
+            periodUsage: { .success(period) },
             sandUsage: { .payload(noAllowance) },
             grokBilling: { .unavailable },
             hasGrokSession: { false }
@@ -937,6 +961,393 @@ struct QuotaTests {
         await signedInMonitor.refresh()
         #expect(signedInMonitor.bars.contains { $0.kind == .cursorModels })
         #expect(!signedInMonitor.bars.contains { $0.kind == .grokBot })
+    }
+
+    @Test
+    func expiredOpaqueCursorTokenAsksToRefresh() async throws {
+        let db = try makeCursorStateDatabase([
+            (CursorStateStore.accessTokenKey, "cursor-opaque-test"),
+            ("cursorAuth/refreshToken", "refresh-should-not-be-read"),
+        ])
+        defer { try? FileManager.default.removeItem(at: db.deletingLastPathComponent()) }
+        #expect(CursorAccessToken.jwtExpiry("cursor-opaque-test") == nil)
+        #expect(CursorAccessToken.state(of: "cursor-opaque-test") == .present)
+
+        let reads = CallLog()
+        let sent = CallLog()
+        let rejected = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { url in
+                reads.add("read")
+                return CursorStateStore.readAccessToken(database: url)
+            },
+            perform: { token in
+                sent.add(token)
+                return CursorHTTPResponse(statusCode: 401, body: Data())
+            }
+        )
+        #expect(rejected == .expired(CursorServerRejection(statusCode: 401, serverMessage: "")))
+        #expect(sent.entries == ["cursor-opaque-test"])
+        #expect(reads.entries.count == 2)
+
+        let forbiddenReads = CallLog()
+        let forbiddenSent = CallLog()
+        let forbidden = await CursorQuotaClient.fetchDashboard(
+            method: "GetSandUsageStatus",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { _ in
+                forbiddenReads.add("read")
+                return .token("cursor-opaque-test")
+            },
+            perform: { token in
+                forbiddenSent.add(token)
+                return CursorHTTPResponse(statusCode: 403, body: Data())
+            }
+        )
+        #expect(forbidden == .expired(CursorServerRejection(statusCode: 403, serverMessage: "")))
+        #expect(forbiddenSent.entries == ["cursor-opaque-test"])
+        #expect(forbiddenReads.entries.count == 2)
+
+        let jwtHTTP = CallLog()
+        let jwt = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            now: Date(timeIntervalSince1970: 1_750_000_000),
+            readToken: { _ in .token(cursorJWT(exp: 1_700_000_000)) },
+            perform: { _ in
+                jwtHTTP.add("http")
+                return CursorHTTPResponse(statusCode: 200, body: Data())
+            }
+        )
+        #expect(jwt == .expired(nil))
+        #expect(jwtHTTP.entries.isEmpty)
+
+        let bodyReads = CallLog()
+        let authBody = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { _ in
+                bodyReads.add("read")
+                return .token("cursor-opaque-test")
+            },
+            perform: { _ in
+                CursorHTTPResponse(
+                    statusCode: 200,
+                    body: Data(#"{"error":"unauthenticated"}"#.utf8)
+                )
+            }
+        )
+        #expect(authBody == .expired(CursorServerRejection(statusCode: 200, serverMessage: "unauthenticated")))
+        #expect(bodyReads.entries.count == 1)
+
+        let sequence = TokenSequence(["cursor-old", "cursor-new"])
+        let replacedSent = CallLog()
+        let usage = Data(#"{"planUsage":{"autoPercentUsed":1}}"#.utf8)
+        let replaced = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { _ in sequence.next() },
+            perform: { token in
+                replacedSent.add(token)
+                if token == "cursor-old" {
+                    return CursorHTTPResponse(statusCode: 401, body: Data())
+                }
+                return CursorHTTPResponse(statusCode: 200, body: usage)
+            }
+        )
+        #expect(replaced == .success(usage))
+        #expect(replacedSent.entries == ["cursor-old", "cursor-new"])
+
+        let reread = CallLog()
+        let rereadTimedOut = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { _ in
+                reread.add("read")
+                return reread.entries.count == 1 ? .token("cursor-opaque-test") : .timedOut
+            },
+            perform: { _ in CursorHTTPResponse(statusCode: 401, body: Data()) }
+        )
+        #expect(rereadTimedOut == .expired(CursorServerRejection(statusCode: 401, serverMessage: "")))
+        #expect(reread.entries.count == 2)
+    }
+
+    @Test
+    func missingCursorTokenIsNotAnExpiredSignIn() async throws {
+        let db = try makeCursorStateDatabase([])
+        defer { try? FileManager.default.removeItem(at: db.deletingLastPathComponent()) }
+        #expect(CursorStateStore.readAccessToken(database: db) == .missing)
+        let missing = URL(fileURLWithPath: "/tmp/hotspot-missing-\(UUID().uuidString).vscdb")
+        #expect(CursorStateStore.readAccessToken(database: missing) == .missing)
+
+        let http = CallLog()
+        let result = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { url in CursorStateStore.readAccessToken(database: url) },
+            perform: { _ in
+                http.add("http")
+                return CursorHTTPResponse(statusCode: 200, body: Data())
+            }
+        )
+        #expect(result == .noToken)
+        #expect(http.entries.isEmpty)
+
+        let network = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { _ in .token("cursor-opaque-test") },
+            perform: { _ in nil }
+        )
+        #expect(network == .failed(nil))
+
+        let server = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { _ in .token("cursor-opaque-test") },
+            perform: { _ in CursorHTTPResponse(statusCode: 500, body: Data()) }
+        )
+        #expect(server == .failed(CursorServerRejection(statusCode: 500, serverMessage: "")))
+    }
+
+    @Test
+    func cursorStateReadTimeoutIsNotAMissingToken() async throws {
+        let script = try hungCommandScript()
+        defer { try? FileManager.default.removeItem(at: script) }
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hotspot-token-timeout-\(UUID().uuidString).vscdb")
+        #expect(FileManager.default.createFile(atPath: db.path, contents: Data()))
+        defer { try? FileManager.default.removeItem(at: db) }
+
+        let started = Date()
+        let read = CursorStateStore.readAccessToken(database: db, timeout: 0.25, executable: script)
+        #expect(read == .timedOut)
+        #expect(read != .missing)
+        #expect(Date().timeIntervalSince(started) < 4)
+
+        let http = CallLog()
+        let first = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { url in
+                CursorStateStore.readAccessToken(database: url, timeout: 0.25, executable: script)
+            },
+            perform: { _ in
+                http.add("http")
+                return CursorHTTPResponse(statusCode: 200, body: Data())
+            }
+        )
+        #expect(first == .timedOut)
+        #expect(first != .noToken)
+        #expect(http.entries.isEmpty)
+
+        let cache = CursorAccessTokenCache()
+        let reads = CallLog()
+        let again = await CursorQuotaClient.fetchDashboard(
+            method: "GetSandUsageStatus",
+            cache: cache,
+            database: db,
+            readToken: { _ in
+                reads.add("read")
+                return .timedOut
+            },
+            perform: { _ in
+                http.add("http")
+                return CursorHTTPResponse(statusCode: 200, body: Data())
+            }
+        )
+        let retried = await CursorQuotaClient.fetchDashboard(
+            method: "GetSandUsageStatus",
+            cache: cache,
+            database: db,
+            readToken: { _ in
+                reads.add("read")
+                return .timedOut
+            },
+            perform: { _ in
+                http.add("http")
+                return CursorHTTPResponse(statusCode: 200, body: Data())
+            }
+        )
+        #expect(again == .timedOut)
+        #expect(retried == .timedOut)
+        #expect(reads.entries.count == 2)
+        #expect(http.entries.isEmpty)
+    }
+
+    @Test
+    func cursorTokenIsRereadOnlyAfterRejectionOrADatabaseChange() async throws {
+        let db = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hotspot-token-cache-\(UUID().uuidString).vscdb")
+        #expect(FileManager.default.createFile(atPath: db.path, contents: Data()))
+        defer { try? FileManager.default.removeItem(at: db) }
+        let cache = CursorAccessTokenCache()
+        let reads = CallLog()
+        let http = CallLog()
+        let status = HTTPStatusBox(200)
+        let body = Data(#"{"planUsage":{"autoPercentUsed":1}}"#.utf8)
+        let responseBody = HTTPBodyBox(body)
+        #expect(CursorDashboardAuth.serverMessage(from: body, token: "cursor-opaque-test") == "")
+        #expect(
+            CursorDashboardAuth.serverMessage(
+                from: Data(#"{"usagePercent":4,"enabled":true}"#.utf8),
+                token: "cursor-opaque-test"
+            ) == ""
+        )
+
+        func fetch() async -> CursorDashboardResult {
+            await CursorQuotaClient.fetchDashboard(
+                method: "GetCurrentPeriodUsage",
+                cache: cache,
+                database: db,
+                readToken: { _ in
+                    reads.add("read")
+                    return .token("cursor-opaque-test")
+                },
+                perform: { token in
+                    http.add(token)
+                    return CursorHTTPResponse(statusCode: status.code, body: responseBody.data)
+                }
+            )
+        }
+
+        #expect(await fetch() == .success(body))
+        #expect(await fetch() == .success(body))
+        #expect(reads.entries.count == 1)
+
+        let before = CursorStateStore.modificationDate(of: db)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(180)],
+            ofItemAtPath: db.path
+        )
+        let after = CursorStateStore.modificationDate(of: db)
+        #expect(before != after)
+        #expect(await fetch() == .success(body))
+        #expect(reads.entries.count == 2)
+
+        status.code = 401
+        responseBody.data = Data()
+        let rejection = CursorServerRejection(statusCode: 401, serverMessage: "")
+        #expect(await fetch() == .expired(rejection))
+        #expect(reads.entries.count == 3)
+        #expect(await fetch() == .expired(rejection))
+        #expect(reads.entries.count == 3)
+        #expect(http.entries.allSatisfy { $0 == "cursor-opaque-test" })
+        #expect(http.entries.count == 5)
+    }
+
+    @Test
+    func cursorAccessTokenCacheCoalescesOneDatabaseRead() async {
+        let cache = CursorAccessTokenCache()
+        let reads = CallLog()
+        let mtime = Date(timeIntervalSince1970: 50)
+        async let first: CursorTokenRead = cache.read(mtime: mtime, force: false) {
+            reads.add("read")
+            try? await Task.sleep(for: .milliseconds(80))
+            return .token("cursor-opaque-test")
+        }
+        async let second: CursorTokenRead = cache.read(mtime: mtime, force: false) {
+            reads.add("read")
+            try? await Task.sleep(for: .milliseconds(80))
+            return .token("cursor-other")
+        }
+        let left = await first
+        let right = await second
+        #expect(left == right)
+        #expect(reads.entries.count == 1)
+    }
+
+    @Test @MainActor
+    func expiredSignInMissingTokenAndStateTimeoutUseDifferentCopy() async {
+        await expectCursorFailureCopy(
+            period: .expired(nil),
+            sand: .expired(nil),
+            message: "Cursor sign-in expired — open Cursor to refresh"
+        )
+        let rejection = CursorServerRejection(statusCode: 401, serverMessage: "ERROR_NOT_LOGGED_IN")
+        await expectCursorFailureCopy(
+            period: .expired(rejection),
+            sand: .expired(rejection),
+            message: "Cursor sign-in expired — open Cursor to refresh (HTTP 401: ERROR_NOT_LOGGED_IN)"
+        )
+        await expectCursorFailureCopy(
+            period: .noToken,
+            sand: .noToken,
+            message: "Open Cursor once so this Mac can read usage"
+        )
+        await expectCursorFailureCopy(
+            period: .timedOut,
+            sand: .timedOut,
+            message: "Couldn't read Cursor state. Quit Cursor if it is open, then Refresh."
+        )
+
+        let empty = QuotaRefreshSources(
+            periodUsage: { .success(Data("{}".utf8)) },
+            sandUsage: { .payload(Data(#"{"enabled":false}"#.utf8)) },
+            grokBilling: { .unavailable },
+            hasGrokSession: { false }
+        )
+        let (monitor, suite) = makeMonitor(sources: empty)
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        await monitor.refresh()
+        #expect(
+            monitor.bars.first { $0.kind == .cursorModels }?.detail
+                == QuotaUnavailableCopy.cursorPoolMissing
+        )
+        #expect(monitor.bars.first { $0.kind == .cursorModels }?.title == "Cursor")
+        #expect(!monitor.bars.contains { $0.kind == .otherModels })
+        #expect(!monitor.bars.contains { $0.kind == .grokBot })
+    }
+
+    @Test @MainActor
+    func aRefreshThatTimesOutIsNotAMissingCursorToken() async {
+        let sources = QuotaRefreshSources(
+            periodUsage: {
+                try? await Task.sleep(for: .seconds(5))
+                return .noToken
+            },
+            sandUsage: {
+                try? await Task.sleep(for: .seconds(5))
+                return .noToken
+            },
+            grokBilling: { .unavailable },
+            hasGrokSession: { false }
+        )
+        let suite = "com.grokcursorusage.tests.deadline.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let monitor = QuotaMonitor(
+            defaults: defaults,
+            notifier: QuotaAlertNotifier(defaults: defaults),
+            sources: sources,
+            fetchTimeout: .milliseconds(200)
+        )
+        await monitor.refresh()
+        #expect(
+            monitor.bars.first { $0.kind == .cursorModels }?.detail
+                == QuotaUnavailableCopy.cursorUnreachable
+        )
+        #expect(
+            monitor.bars.first { $0.kind == .otherModels }?.detail
+                == QuotaUnavailableCopy.cursorUnreachable
+        )
+        #expect(
+            monitor.bars.first { $0.kind == .grokBot }?.detail
+                == QuotaUnavailableCopy.grokBotUnreachable
+        )
+        #expect(!monitor.bars.contains { $0.detail == QuotaUnavailableCopy.cursorNoToken })
     }
 
     @Test
@@ -1046,8 +1457,8 @@ struct QuotaTests {
         let end = Date(timeIntervalSince1970: 1_800_000_000)
         box.grok = grokBillingJSON(percent: 80, end: end)
         let sources = QuotaRefreshSources(
-            periodUsage: { nil },
-            sandUsage: { .needsSignIn },
+            periodUsage: { .noToken },
+            sandUsage: { .noToken },
             grokBilling: { box.grokFetch },
             hasGrokSession: { true }
         )
@@ -1222,8 +1633,8 @@ struct QuotaTests {
     @Test @MainActor
     func outdatedGrokCLIShowsARowInsteadOfABlankBar() async {
         let sources = QuotaRefreshSources(
-            periodUsage: { nil },
-            sandUsage: { .needsSignIn },
+            periodUsage: { .noToken },
+            sandUsage: { .noToken },
             grokBilling: { .outdatedClient },
             hasGrokSession: { true }
         )
@@ -1235,6 +1646,705 @@ struct QuotaTests {
         #expect(grok?.title == "Grok")
         #expect(grok?.state == .unavailable(QuotaUnavailableCopy.grokCLIOutdated))
     }
+
+    @Test
+    func cursorDashboardRequestCarriesTheDesktopChecksum() throws {
+        let now = Date(timeIntervalSince1970: 1_760_000_000)
+        let profile = CursorDashboardAuth.Profile(
+            version: "3.27.6",
+            machineId: "abc123machine",
+            macMachineId: "mac999",
+            operatingSystem: "darwin",
+            architecture: "arm64",
+            timeZone: "America/Chicago"
+        )
+        let checksum = CursorDashboardAuth.checksum(
+            machineId: "abc123machine",
+            macMachineId: "mac999",
+            at: now
+        )
+        #expect(checksum == "fn-BnklOabc123machine/mac999")
+        #expect(
+            CursorDashboardAuth.checksum(machineId: "abc123machine", macMachineId: nil, at: now)
+                == "fn-BnklOabc123machine"
+        )
+        #expect(
+            CursorDashboardAuth.checksum(machineId: "abc123machine", macMachineId: "", at: now)
+                == "fn-BnklOabc123machine"
+        )
+
+        let request = CursorDashboardAuth.urlRequest(
+            method: "GetCurrentPeriodUsage",
+            token: "cursor-opaque-test",
+            profile: CursorDashboardAuth.Profile(
+                version: profile.version,
+                machineId: profile.machineId,
+                macMachineId: profile.macMachineId,
+                operatingSystem: profile.operatingSystem,
+                architecture: profile.architecture,
+                timeZone: profile.timeZone,
+                deviceMemory: "17179869184"
+            ),
+            now: now,
+            requestID: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE",
+            traceParent: "00-0123456789abcdef0123456789abcdef-0123456789abcdef-00",
+            clientKey: "ab" + String(repeating: "cd", count: 31)
+        )
+        #expect(
+            request.url?.absoluteString
+                == "https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage"
+        )
+        #expect(request.httpMethod == "POST")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer cursor-opaque-test")
+        #expect(request.value(forHTTPHeaderField: "x-cursor-checksum") == checksum)
+        #expect(request.value(forHTTPHeaderField: "x-cursor-client-version") == "3.27.6")
+        #expect(request.value(forHTTPHeaderField: "x-cursor-client-type") == "ide")
+        #expect(request.value(forHTTPHeaderField: "x-cursor-client-layout") == "editor")
+        #expect(request.value(forHTTPHeaderField: "x-cursor-client-os") == "darwin")
+        #expect(request.value(forHTTPHeaderField: "x-cursor-client-arch") == "arm64")
+        #expect(request.value(forHTTPHeaderField: "x-cursor-client-device-type") == "desktop")
+        #expect(request.value(forHTTPHeaderField: "x-cursor-client-device-memory") == "17179869184")
+        #expect(request.value(forHTTPHeaderField: "x-cursor-streaming") == "true")
+        #expect(request.value(forHTTPHeaderField: "x-ghost-mode") == "implicit-false")
+        #expect(request.value(forHTTPHeaderField: "x-new-onboarding-completed") == "false")
+        #expect(request.value(forHTTPHeaderField: "Connect-Protocol-Version") == "1")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") == "application/proto")
+        #expect(request.value(forHTTPHeaderField: "Content-Length") == "0")
+        #expect(request.value(forHTTPHeaderField: "Accept-Encoding") == "gzip,br")
+        #expect(request.value(forHTTPHeaderField: "User-Agent") == "connect-es/1.6.1")
+        #expect(request.value(forHTTPHeaderField: "User-Agent") == CursorDashboardAuth.connectUserAgent)
+        #expect(request.value(forHTTPHeaderField: "x-request-id") == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        #expect(request.value(forHTTPHeaderField: "x-amzn-trace-id") == "Root=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        #expect(request.value(forHTTPHeaderField: "traceparent") == "00-0123456789abcdef0123456789abcdef-0123456789abcdef-00")
+        #expect(request.value(forHTTPHeaderField: "x-client-key") == "ab" + String(repeating: "cd", count: 31))
+        #expect(request.value(forHTTPHeaderField: "x-cursor-timezone") == "America/Chicago")
+        #expect(request.value(forHTTPHeaderField: "x-session-id") == nil)
+        #expect(request.value(forHTTPHeaderField: "x-cursor-client-os-version") == nil)
+        #expect(request.httpBody == Data())
+        let joined = (request.allHTTPHeaderFields ?? [:]).values.joined(separator: "\n")
+        #expect(!joined.contains("refresh-should-not-be-read"))
+        #expect(!joined.localizedCaseInsensitiveContains("refreshToken"))
+        let wire = String(decoding: CursorDashboardAuth.http1Message(for: request), as: UTF8.self)
+        #expect(wire.hasPrefix("POST /aiserver.v1.DashboardService/GetCurrentPeriodUsage HTTP/1.1\r\nHost: api2.cursor.sh\r\n"))
+        #expect(wire.contains("Content-Type: application/proto\r\n"))
+        #expect(wire.contains("Content-Length: 0\r\n"))
+        #expect(wire.contains("User-Agent: connect-es/1.6.1\r\n"))
+        #expect(wire.contains("Accept-Encoding: gzip,br\r\n"))
+        #expect(wire.contains("Cookie: \r\n") || wire.contains("Cookie:\r\n"))
+        #expect(!wire.contains("Cookie-"))
+        #expect(!wire.contains("{}"))
+        #expect(!wire.contains("x-session-id"))
+        #expect(wire.hasSuffix("\r\n\r\n"))
+
+        let sand = CursorDashboardAuth.urlRequest(
+            method: "GetSandUsageStatus",
+            token: "cursor-opaque-test",
+            profile: CursorDashboardAuth.Profile(
+                version: "3.27.6",
+                machineId: nil,
+                macMachineId: "ignored-without-machine",
+                operatingSystem: "darwin",
+                architecture: "x64",
+                timeZone: nil
+            ),
+            now: now,
+            requestID: "request-test"
+        )
+        #expect(sand.value(forHTTPHeaderField: "x-cursor-checksum") == nil)
+        #expect(sand.value(forHTTPHeaderField: "Authorization") == "Bearer cursor-opaque-test")
+        #expect(sand.url?.absoluteString.hasSuffix("GetSandUsageStatus") == true)
+
+        let storage = Data(
+            #"{"telemetry.machineId":"abc123machine","telemetry.macMachineId":"mac999","cursorAuth/refreshToken":"refresh-should-not-be-read"}"#
+                .utf8
+        )
+        let ids = CursorDashboardAuth.machineIDs(from: storage)
+        #expect(ids.machineId == "abc123machine")
+        #expect(ids.macMachineId == "mac999")
+        #expect(CursorDashboardAuth.installedVersion(from: Data(#"{"version":" 3.27.6 "}"#.utf8)) == "3.27.6")
+    }
+
+    @Test
+    func cursorDashboardProfileReadsMachineIDsBesideTheStateDatabase() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("hotspot-cursor-profile-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storage = directory.appendingPathComponent("storage.json")
+        let product = directory.appendingPathComponent("product.json")
+        try #"{"telemetry.machineId":"m-1","telemetry.macMachineId":"mac-1"}"#
+            .write(to: storage, atomically: true, encoding: .utf8)
+        try #"{"version":"9.9.9"}"#.write(to: product, atomically: true, encoding: .utf8)
+
+        let profile = CursorDashboardAuth.profile(
+            storageFile: storage,
+            productFiles: [product],
+            operatingSystem: "darwin",
+            architecture: "arm64",
+            timeZone: "UTC",
+            fallbackVersion: "3.27.6",
+            deviceMemory: nil,
+            resolveLiveIDs: false
+        )
+        #expect(profile == CursorDashboardAuth.Profile(
+            version: "9.9.9",
+            machineId: "m-1",
+            macMachineId: "mac-1",
+            operatingSystem: "darwin",
+            architecture: "arm64",
+            timeZone: "UTC"
+        ))
+        let live = CursorDashboardAuth.profile(
+            storageFile: storage,
+            productFiles: [product],
+            operatingSystem: "darwin",
+            architecture: "arm64",
+            timeZone: "UTC",
+            fallbackVersion: "3.27.6",
+            deviceMemory: "1024",
+            liveMachineID: "live-machine",
+            liveMacMachineID: "live-mac",
+            resolveLiveIDs: true
+        )
+        #expect(live.machineId == "live-machine")
+        #expect(live.macMachineId == "live-mac")
+        #expect(live.deviceMemory == "1024")
+
+        let missing = CursorDashboardAuth.profile(
+            storageFile: directory.appendingPathComponent("missing.json"),
+            productFiles: [directory.appendingPathComponent("nope.json")],
+            operatingSystem: "darwin",
+            architecture: "x64",
+            timeZone: nil,
+            fallbackVersion: "3.27.6",
+            deviceMemory: nil,
+            resolveLiveIDs: false
+        )
+        #expect(missing.machineId == nil)
+        #expect(missing.macMachineId == nil)
+        #expect(missing.version == "3.27.6")
+    }
+
+    @Test
+    func cursorDashboardProtoRequestMatchesCursor3276() throws {
+        let generated = CursorDashboardAuth.urlRequest(
+            method: "GetSandUsageStatus",
+            token: "cursor-opaque-test",
+            profile: CursorDashboardAuth.Profile(
+                version: "3.27.6",
+                machineId: nil,
+                macMachineId: nil,
+                operatingSystem: "darwin",
+                architecture: "x64",
+                timeZone: nil
+            )
+        )
+        let trace = try #require(generated.value(forHTTPHeaderField: "traceparent"))
+        #expect(trace.count == 55)
+        #expect(trace.hasPrefix("00-"))
+        #expect(trace.hasSuffix("-00"))
+        let parts = trace.split(separator: "-")
+        #expect(parts.count == 4)
+        #expect(parts[1].count == 32)
+        #expect(parts[2].count == 16)
+        #expect(parts[1].allSatisfy { $0.isHexDigit })
+        #expect(parts[2].allSatisfy { $0.isHexDigit })
+        let key = try #require(generated.value(forHTTPHeaderField: "x-client-key"))
+        #expect(key.count == 64)
+        #expect(key.allSatisfy { $0.isHexDigit })
+        #expect(key == CursorDashboardAuth.processClientKey)
+        #expect(generated.value(forHTTPHeaderField: "x-cursor-client-version") == "3.27.6")
+        #expect(generated.value(forHTTPHeaderField: "x-session-id") == nil)
+        #expect(generated.httpBody == Data())
+
+        let ioreg = """
+        +-o Root  <class IOPlatformExpertDevice>
+          | "IOPlatformUUID" = "A1B2C3D4-E5F6-7890-ABCD-EF1234567890"
+        """
+        let uuid = try #require(CursorDashboardAuth.platformUUID(from: ioreg))
+        #expect(uuid == "a1b2c3d4-e5f6-7890-abcd-ef1234567890")
+        #expect(
+            CursorDashboardAuth.sha256Hex(uuid)
+                == "a447ee1578a84992cb7a7ce115d8c83d9a3a600d9ecb42c1638321e696418bce"
+        )
+        #expect(
+            CursorDashboardAuth.sha256Hex("abc")
+                == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        )
+        let mac = try #require(
+            CursorDashboardAuth.firstEligibleMAC([
+                "00:00:00:00:00:00",
+                "FF-FF-FF-FF-FF-FF",
+                "ac:de:48:00:11:22",
+                "AA-BB-CC-DD-EE-FF",
+            ])
+        )
+        #expect(mac == "aa:bb:cc:dd:ee:ff")
+        #expect(
+            CursorDashboardAuth.sha256Hex(mac)
+                == "c1582e87c802221899199e286ead9a7ed13eb3b5e3827be6cc149fb82a9e04f7"
+        )
+        #expect(
+            CursorDashboardAuth.firstEligibleMAC(["02:00:00:00:00:01"]) == "02:00:00:00:00:01"
+        )
+
+        let period = data(hex: "0880e2cfaa061080f09dc7061a126100000000000029406900000000000044405a0a4175746f2031322e3525")
+        let json = try #require(CursorDashboardAuth.usageJSON(method: "GetCurrentPeriodUsage", body: period))
+        let bars = try #require(
+            QuotaParsing.cursorBars(from: json, now: Date(timeIntervalSince1970: 1_720_000_000))
+        )
+        #expect(bars.map(\.usedPercent) == [12.5, 40])
+
+        let hidden = data(hex: "0a060880e2cfaa0612060880f09dc706190000000000001d4020017a09537570657247726f6b")
+        let hiddenJSON = try #require(CursorDashboardAuth.usageJSON(method: "GetSandUsageStatus", body: hidden))
+        #expect(QuotaParsing.grokBotBar(from: hiddenJSON) == nil)
+
+        let open = data(hex: "190000000000001d40")
+        let openJSON = try #require(CursorDashboardAuth.usageJSON(method: "GetSandUsageStatus", body: open))
+        let bot = try #require(
+            QuotaParsing.grokBotBar(from: openJSON, now: Date(timeIntervalSince1970: 1_720_000_000))
+        )
+        #expect(bot.usedPercent == 7.25)
+
+        let token = "cursor-opaque-test"
+        let leaked = Data(
+            #"{"code":"unauthenticated","message":"nope Bearer \#(token) and cursor-abcdefghijklmnopqrstuvwxyz"}"#.utf8
+        )
+        let message = CursorDashboardAuth.serverMessage(from: leaked, token: token)
+        #expect(message.contains("unauthenticated"))
+        #expect(!message.contains(token))
+        #expect(!message.contains("abcdefghijklmnopqrstuvwxyz"))
+        #expect(message.contains("[redacted]"))
+        let shown = QuotaUnavailableCopy.explained(
+            QuotaUnavailableCopy.cursorSignInExpired,
+            CursorServerRejection(statusCode: 401, serverMessage: message)
+        )
+        #expect(shown.hasPrefix(QuotaUnavailableCopy.cursorSignInExpired + " (HTTP 401:"))
+        #expect(!shown.contains(token))
+        #expect(
+            QuotaUnavailableCopy.explained(QuotaUnavailableCopy.cursorSignInExpired, nil)
+                == QuotaUnavailableCopy.cursorSignInExpired
+        )
+
+        let body = Data(#"{"code":"unauthenticated","message":"ERROR_NOT_LOGGED_IN"}"#.utf8)
+        let raw = Data(
+            "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\n\r\n"
+                .utf8
+        ) + body
+        let parsed = try #require(CursorDashboardAuth.parseHTTP1(raw))
+        #expect(parsed.statusCode == 401)
+        #expect(parsed.body == body)
+        #expect(CursorDashboardAuth.http1MessageIsComplete(raw))
+        let chunked = Data("HTTP/1.1 500 ERR\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n".utf8)
+        #expect(CursorDashboardAuth.parseHTTP1(chunked)?.body == Data("hello".utf8))
+
+        let plain = Data(#"{"usagePercent":1}"#.utf8)
+        let compressed = try gzipData(plain)
+        let inflated = CursorDashboardAuth.decodedBody(
+            CursorHTTPResponse(statusCode: 200, body: compressed, contentEncoding: "gzip")
+        )
+        guard case .success(let decoded) = inflated else {
+            Issue.record("gzip decode failed")
+            return
+        }
+        #expect(decoded == plain)
+    }
+
+    @Test
+    func cursorServerRejectionShowsTheStatusAndHidesTheToken() async throws {
+        let token = "cursor-opaque-test"
+        let db = try makeCursorStateDatabase([
+            (CursorStateStore.accessTokenKey, token),
+        ])
+        defer { try? FileManager.default.removeItem(at: db.deletingLastPathComponent()) }
+        let body = Data(#"{"code":"unauthenticated","message":"ERROR_NOT_LOGGED_IN \#(token)"}"#.utf8)
+        let rejected = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { _ in .token(token) },
+            perform: { _ in CursorHTTPResponse(statusCode: 401, body: body) }
+        )
+        guard case .expired(let rejection) = rejected else {
+            Issue.record("expected an expired sign-in")
+            return
+        }
+        #expect(rejection?.statusCode == 401)
+        #expect(rejection?.serverMessage.contains("ERROR_NOT_LOGGED_IN") == true)
+        #expect(rejection?.serverMessage.contains(token) == false)
+        let logged = CursorDashboardAuth.unifiedLogFields(
+            CursorServerRejection(
+                statusCode: 401,
+                serverMessage: "unauthenticated: Error Bearer cursor-abcdefghijklmnopqrstuvwxyz"
+            )
+        )
+        #expect(CursorDashboardLog.subsystem == "com.grokcursorusage.app")
+        #expect(CursorDashboardLog.category == "cursor-dashboard")
+        #expect(logged.statusCode == 401)
+        #expect(logged.message == "unauthenticated: Error Bearer [redacted]")
+        #expect(!logged.message.contains("abcdefghijklmnopqrstuvwxyz"))
+
+        let garbage = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { _ in .token(token) },
+            perform: { _ in CursorHTTPResponse(statusCode: 200, body: Data([0xff, 0x00])) }
+        )
+        #expect(
+            garbage
+                == .failed(
+                    CursorServerRejection(
+                        statusCode: 200,
+                        serverMessage: "Cursor returned a usage body this app could not read."
+                    )
+                )
+        )
+
+        let period = data(hex: "0880e2cfaa061080f09dc7061a126100000000000029406900000000000044405a0a4175746f2031322e3525")
+        let success = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { _ in .token(token) },
+            perform: { _ in CursorHTTPResponse(statusCode: 200, body: period) }
+        )
+        guard case .success(let payload) = success else {
+            Issue.record("expected proto usage to become JSON")
+            return
+        }
+        let bars = try #require(
+            QuotaParsing.cursorBars(from: payload, now: Date(timeIntervalSince1970: 1_720_000_000))
+        )
+        #expect(bars.map(\.usedPercent) == [12.5, 40])
+        #expect(!String(decoding: payload, as: UTF8.self).contains(token))
+    }
+
+    @Test
+    func safeStorageDecryptsTheFixedChromiumCiphertext() {
+        let password = Data("pbkdf2-test-password".utf8)
+        let key = Data([
+            0x29, 0xd0, 0x84, 0xeb, 0x95, 0x46, 0x19, 0x8b,
+            0x55, 0x9b, 0x4a, 0x38, 0xca, 0x28, 0x6a, 0xf3,
+        ])
+        #expect(CursorSafeStorage.deriveKey(password) == key)
+
+        let plaintext = Data("usage-token-plaintext".utf8)
+        let ciphertext = Data([
+            0x4d, 0xc9, 0xcc, 0xc7, 0x1b, 0x56, 0x06, 0xc9,
+            0x3f, 0x74, 0x7c, 0x44, 0x28, 0x9e, 0x2a, 0x8e,
+            0x03, 0x64, 0x00, 0x6f, 0xa1, 0xd3, 0x22, 0x84,
+            0x43, 0xd5, 0x1d, 0x23, 0x39, 0x59, 0xbc, 0x47,
+        ])
+        #expect(CursorSafeStorage.decrypt(ciphertext: ciphertext, password: password) == plaintext)
+        var prefixed = Data([0x76, 0x31, 0x30])
+        prefixed.append(ciphertext)
+        #expect(CursorSafeStorage.decrypt(ciphertext: prefixed, password: password) == plaintext)
+        #expect(
+            CursorSafeStorage.openEnvelope(
+                "cursor-safe-storage:v1:djEwTcnMxxtWBsk/dHxEKJ4qjgNkAG+h0yKEQ9UdIzlZvEc=",
+                password: password
+            ) == "usage-token-plaintext"
+        )
+
+        let jwt = cursorJWT(exp: 1_600_000_000)
+        #expect(jwt == "eyJhbGciOiJub25lIn0.eyJleHAiOjE2MDAwMDAwMDB9")
+        let jwtCiphertext = Data([
+            0xcc, 0x2a, 0x88, 0x54, 0xc6, 0xa8, 0x81, 0x7f,
+            0x04, 0xb3, 0xaf, 0xac, 0xd2, 0x04, 0x6b, 0x46,
+            0x01, 0xf8, 0x2d, 0xab, 0x89, 0x96, 0x99, 0x3d,
+            0xc4, 0x9c, 0x51, 0x72, 0xdb, 0x70, 0x5f, 0x01,
+            0x69, 0x13, 0xca, 0x4e, 0x78, 0x96, 0xbf, 0x94,
+            0xe8, 0x2a, 0x0f, 0x1e, 0x12, 0x13, 0x5d, 0x56,
+        ])
+        #expect(CursorSafeStorage.decrypt(ciphertext: jwtCiphertext, password: password) == Data(jwt.utf8))
+        #expect(
+            CursorSafeStorage.openEnvelope(
+                "cursor-safe-storage:v1:djEwzCqIVMaogX8Es6+s0gRrRgH4LauJlpk9xJxRcttwXwFpE8pOeJa/lOgqDx4SE11W",
+                password: password
+            ) == jwt
+        )
+        #expect(CursorAccessToken.jwtExpiry(jwt) == Date(timeIntervalSince1970: 1_600_000_000))
+        #expect(CursorAccessToken.jwtExpiry("usage-token-plaintext") == nil)
+    }
+
+    @Test
+    func keychainAccountOrderAndDenialStatuses() {
+        #expect(CursorSafeStorage.service == "Cursor Safe Storage")
+        #expect(CursorSafeStorage.account == "Cursor Key")
+        #expect(CursorSafeStorage.legacyAccount == "Cursor")
+        #expect(CursorSafeStorage.prompt == QuotaUnavailableCopy.cursorKeychainDenied)
+
+        let secret = Data("pbkdf2-test-password".utf8)
+        #expect(CursorKeychainAccess.result(status: CursorKeychainAccess.success, data: secret) == .password(secret))
+        #expect(CursorKeychainAccess.result(status: CursorKeychainAccess.success, data: Data()) == .notFound)
+        #expect(CursorKeychainAccess.result(status: CursorKeychainAccess.userCanceled, data: secret) == .denied)
+        #expect(CursorKeychainAccess.result(status: CursorKeychainAccess.authFailed, data: nil) == .denied)
+        #expect(CursorKeychainAccess.result(status: CursorKeychainAccess.interactionNotAllowed, data: nil) == .denied)
+        #expect(CursorKeychainAccess.result(status: CursorKeychainAccess.itemNotFound, data: nil) == .notFound)
+        #expect(CursorKeychainAccess.userCanceled == -128)
+        #expect(CursorKeychainAccess.authFailed == -25293)
+        #expect(CursorKeychainAccess.interactionNotAllowed == -25308)
+        #expect(CursorKeychainAccess.itemNotFound == -25300)
+
+        var legacyReads = 0
+        let denied = CursorSafeStorage.resolve(primary: .denied) {
+            legacyReads += 1
+            return .password(secret)
+        }
+        #expect(denied == .denied)
+        #expect(legacyReads == 0)
+        let migrated = CursorSafeStorage.resolve(primary: .notFound) {
+            legacyReads += 1
+            return .password(secret)
+        }
+        #expect(migrated == .password(secret))
+        #expect(legacyReads == 1)
+    }
+
+    @Test
+    func plaintextTokenDoesNotReadTheKeychain() async throws {
+        let db = try emptyStateDatabase()
+        defer { try? FileManager.default.removeItem(at: db) }
+        let lookups = CallLog()
+        let sent = CallLog()
+        let result = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { _ in .token("cursor-opaque-test") },
+            perform: { token in
+                sent.add(token)
+                return CursorHTTPResponse(statusCode: 200, body: Data("{}".utf8))
+            },
+            keychainPassword: {
+                lookups.add("keychain")
+                return .denied
+            },
+            secrets: CursorSafeStorageSecrets()
+        )
+        #expect(result == .success(Data("{}".utf8)))
+        #expect(sent.entries == ["cursor-opaque-test"])
+        #expect(lookups.entries.isEmpty)
+    }
+
+    @Test
+    func encryptedAccessTokenIsDecryptedBeforeTheDashboardCall() async throws {
+        let db = try emptyStateDatabase()
+        defer { try? FileManager.default.removeItem(at: db) }
+        let secrets = CursorSafeStorageSecrets()
+        let lookups = CallLog()
+        let sent = CallLog()
+        let envelope = "cursor-safe-storage:v1:djEwTcnMxxtWBsk/dHxEKJ4qjgNkAG+h0yKEQ9UdIzlZvEc="
+        let password = Data("pbkdf2-test-password".utf8)
+
+        func fetch(status: Int) async -> CursorDashboardResult {
+            await CursorQuotaClient.fetchDashboard(
+                method: "GetCurrentPeriodUsage",
+                cache: CursorAccessTokenCache(),
+                database: db,
+                readToken: { _ in .token(envelope) },
+                perform: { token in
+                    sent.add(token)
+                    return CursorHTTPResponse(statusCode: status, body: Data())
+                },
+                keychainPassword: {
+                    lookups.add("keychain")
+                    return .password(password)
+                },
+                secrets: secrets
+            )
+        }
+
+        let rejection = CursorServerRejection(statusCode: 401, serverMessage: "")
+        #expect(await fetch(status: 401) == .expired(rejection))
+        #expect(sent.entries == ["usage-token-plaintext"])
+        #expect(lookups.entries.count == 1)
+        #expect(!sent.entries.joined().contains("cursor-safe-storage"))
+    }
+
+    @Test
+    func expiredDecryptedJWTIsNotSent() async throws {
+        let db = try emptyStateDatabase()
+        defer { try? FileManager.default.removeItem(at: db) }
+        let sent = CallLog()
+        let envelope = "cursor-safe-storage:v1:djEwzCqIVMaogX8Es6+s0gRrRgH4LauJlpk9xJxRcttwXwFpE8pOeJa/lOgqDx4SE11W"
+        let result = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            now: Date(timeIntervalSince1970: 1_700_000_000),
+            readToken: { _ in .token(envelope) },
+            perform: { _ in
+                sent.add("sent")
+                return CursorHTTPResponse(statusCode: 200, body: Data())
+            },
+            keychainPassword: { .password(Data("pbkdf2-test-password".utf8)) },
+            secrets: CursorSafeStorageSecrets()
+        )
+        #expect(result == .expired(nil))
+        #expect(sent.entries.isEmpty)
+    }
+
+    @Test
+    func keychainDenialDoesNotPromptAgainUntilRefresh() async throws {
+        let db = try emptyStateDatabase()
+        defer { try? FileManager.default.removeItem(at: db) }
+        let secrets = CursorSafeStorageSecrets()
+        let lookups = CallLog()
+        let sent = CallLog()
+        let envelope = "cursor-safe-storage:v1:djEwTcnMxxtWBsk/dHxEKJ4qjgNkAG+h0yKEQ9UdIzlZvEc="
+        let cache = CursorAccessTokenCache()
+
+        func fetch() async -> CursorDashboardResult {
+            await CursorQuotaClient.fetchDashboard(
+                method: "GetCurrentPeriodUsage",
+                cache: cache,
+                database: db,
+                readToken: { _ in .token(envelope) },
+                perform: { _ in
+                    sent.add("sent")
+                    return nil
+                },
+                keychainPassword: {
+                    lookups.add("keychain")
+                    return .denied
+                },
+                secrets: secrets
+            )
+        }
+
+        #expect(await fetch() == .keychainDenied)
+        #expect(await fetch() == .keychainDenied)
+        #expect(lookups.entries.count == 1)
+        await secrets.allowPromptAgain()
+        #expect(await fetch() == .keychainDenied)
+        #expect(lookups.entries.count == 2)
+        #expect(sent.entries.isEmpty)
+    }
+
+    @Test
+    func missingKeychainItemIsRetriedAndIsNotADenial() async throws {
+        let db = try emptyStateDatabase()
+        defer { try? FileManager.default.removeItem(at: db) }
+        let lookups = CallLog()
+        let envelope = "cursor-safe-storage:v1:djEwTcnMxxtWBsk/dHxEKJ4qjgNkAG+h0yKEQ9UdIzlZvEc="
+        let cache = CursorAccessTokenCache()
+        let secrets = CursorSafeStorageSecrets()
+
+        func fetch() async -> CursorDashboardResult {
+            await CursorQuotaClient.fetchDashboard(
+                method: "GetSandUsageStatus",
+                cache: cache,
+                database: db,
+                readToken: { _ in .token(envelope) },
+                perform: { _ in nil },
+                keychainPassword: {
+                    lookups.add("keychain")
+                    return .notFound
+                },
+                secrets: secrets
+            )
+        }
+
+        #expect(await fetch() == .keychainMissing)
+        #expect(await fetch() == .keychainMissing)
+        #expect(lookups.entries.count == 2)
+        #expect(SandUsageFetch.from(await fetch()) == .keychainMissing)
+        #expect(lookups.entries.count == 3)
+    }
+
+    @Test
+    func oneAllowIsSharedByConcurrentEnvelopeReads() async {
+        let secrets = CursorSafeStorageSecrets()
+        let lookups = CallLog()
+        let envelope = "cursor-safe-storage:v1:djEwTcnMxxtWBsk/dHxEKJ4qjgNkAG+h0yKEQ9UdIzlZvEc="
+        let lookup: @Sendable () async -> CursorKeychainPasswordResult = {
+            lookups.add("keychain")
+            try? await Task.sleep(for: .milliseconds(40))
+            return .password(Data("pbkdf2-test-password".utf8))
+        }
+        async let first = secrets.unlock(.token(envelope), lookup: lookup)
+        async let second = secrets.unlock(.token(envelope), lookup: lookup)
+        let left = await first
+        let right = await second
+        #expect(left == .token("usage-token-plaintext"))
+        #expect(right == .token("usage-token-plaintext"))
+        #expect(lookups.entries.count == 1)
+        let third = await secrets.unlock(.token(envelope), lookup: lookup)
+        #expect(third == .token("usage-token-plaintext"))
+        #expect(lookups.entries.count == 1)
+    }
+
+    @Test
+    func undecryptableEnvelopeIsNotSent() async throws {
+        let db = try emptyStateDatabase()
+        defer { try? FileManager.default.removeItem(at: db) }
+        let sent = CallLog()
+        let envelope = "cursor-safe-storage:v1:djEwTcnMxxtWBsk/dHxEKJ4qjgNkAG+h0yKEQ9UdIzlZvEc="
+        let result = await CursorQuotaClient.fetchDashboard(
+            method: "GetCurrentPeriodUsage",
+            cache: CursorAccessTokenCache(),
+            database: db,
+            readToken: { _ in .token(envelope) },
+            perform: { _ in
+                sent.add("sent")
+                return nil
+            },
+            keychainPassword: { .password(Data("not-the-keychain-password".utf8)) },
+            secrets: CursorSafeStorageSecrets()
+        )
+        #expect(result == .keychainLocked)
+        #expect(sent.entries.isEmpty)
+    }
+
+    @Test @MainActor
+    func keychainDenialAndAMissingItemUseDifferentCopy() async {
+        await expectCursorFailureCopy(
+            period: .keychainDenied,
+            sand: .keychainDenied,
+            message: "Allow Keychain access to read Cursor usage"
+        )
+        await expectCursorFailureCopy(
+            period: .keychainMissing,
+            sand: .keychainMissing,
+            message: "Cursor's Keychain item was not found. Open Cursor, then Refresh."
+        )
+        await expectCursorFailureCopy(
+            period: .keychainLocked,
+            sand: .keychainLocked,
+            message: "Cursor's saved sign-in could not be unlocked."
+        )
+    }
+}
+
+@MainActor
+private func expectCursorFailureCopy(
+    period: CursorDashboardResult,
+    sand: SandUsageFetch,
+    message: String
+) async {
+    let sources = QuotaRefreshSources(
+        periodUsage: { period },
+        sandUsage: { sand },
+        grokBilling: { .unavailable },
+        hasGrokSession: { false }
+    )
+    let (monitor, suite) = makeMonitor(sources: sources)
+    defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+    await monitor.refresh()
+    for kind in [QuotaKind.cursorModels, QuotaKind.otherModels, QuotaKind.grokBot] {
+        let bar = monitor.bars.first { $0.kind == kind }
+        #expect(bar?.detail == message)
+        #expect(bar?.state == .unavailable(message))
+        if kind == .grokBot {
+            #expect(bar?.title == "Grok Bot")
+        } else {
+            #expect(bar?.title == kind.title)
+        }
+    }
+    #expect(!monitor.bars.contains { $0.detail == "Grok Bot usage is unavailable" })
+    #expect(!monitor.bars.contains { $0.detail == "Grok Bot weekly usage is unavailable" })
 }
 
 @MainActor
@@ -1250,6 +2360,50 @@ private func makeMonitor(sources: QuotaRefreshSources) -> (QuotaMonitor, String)
     )
     return (monitor, suite)
 }
+
+private func emptyStateDatabase() throws -> URL {
+    let db = FileManager.default.temporaryDirectory
+        .appendingPathComponent("safestorage-\(UUID().uuidString).vscdb")
+    if !FileManager.default.createFile(atPath: db.path, contents: Data()) {
+        throw EmptyStateDatabaseFailed()
+    }
+    return db
+}
+
+private struct EmptyStateDatabaseFailed: Error {}
+
+private func data(hex: String) -> Data {
+    var bytes: [UInt8] = []
+    var index = hex.startIndex
+    while index < hex.endIndex {
+        let next = hex.index(index, offsetBy: 2)
+        bytes.append(UInt8(hex[index..<next], radix: 16) ?? 0)
+        index = next
+    }
+    return Data(bytes)
+}
+
+private func gzipData(_ data: Data) throws -> Data {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/gzip")
+    process.arguments = ["-c"]
+    let stdin = Pipe()
+    let stdout = Pipe()
+    process.standardInput = stdin
+    process.standardOutput = stdout
+    process.standardError = Pipe()
+    try process.run()
+    stdin.fileHandleForWriting.write(data)
+    try stdin.fileHandleForWriting.close()
+    let compressed = stdout.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    if process.terminationStatus != 0 {
+        throw GzipFailed()
+    }
+    return compressed
+}
+
+private struct GzipFailed: Error {}
 
 private func grokBillingJSON(percent: Double, end: Date) -> GrokBillingFetch {
     let stamp = ISO8601DateFormatter().string(from: end)
@@ -1358,6 +2512,72 @@ private func protoVarintValue(_ value: UInt64) -> [UInt8] {
         bytes.append(byte)
     } while value != 0
     return bytes
+}
+
+private func makeCursorStateDatabase(_ rows: [(String, String)]) throws -> URL {
+    let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("hotspot-cursor-state-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let database = directory.appendingPathComponent("state.vscdb")
+    var sql = "CREATE TABLE ItemTable (key TEXT PRIMARY KEY, value TEXT);"
+    for (key, value) in rows {
+        let escapedKey = key.replacingOccurrences(of: "'", with: "''")
+        let escapedValue = value.replacingOccurrences(of: "'", with: "''")
+        sql += "\nINSERT INTO ItemTable VALUES ('\(escapedKey)','\(escapedValue)');"
+    }
+    let create = Process()
+    create.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+    create.arguments = [database.path, sql]
+    try create.run()
+    create.waitUntilExit()
+    guard create.terminationStatus == 0 else {
+        try? FileManager.default.removeItem(at: directory)
+        throw CocoaError(.fileWriteUnknown)
+    }
+    return database
+}
+
+private final class CallLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String] = []
+
+    func add(_ value: String) {
+        lock.lock()
+        values.append(value)
+        lock.unlock()
+    }
+
+    var entries: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return values
+    }
+}
+
+private final class HTTPStatusBox: @unchecked Sendable {
+    var code: Int
+    init(_ code: Int) { self.code = code }
+}
+
+private final class HTTPBodyBox: @unchecked Sendable {
+    var data: Data
+    init(_ data: Data) { self.data = data }
+}
+
+private final class TokenSequence: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String]
+
+    init(_ values: [String]) {
+        self.values = values
+    }
+
+    func next() -> CursorTokenRead {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !values.isEmpty else { return .missing }
+        return .token(values.removeFirst())
+    }
 }
 
 private func hungCommandScript() throws -> URL {

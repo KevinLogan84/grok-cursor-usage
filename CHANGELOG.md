@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3] - 2026-10-23
+
+### Fixed
+
+- An expired Cursor sign-in no longer looks like a missing one. When Cursor rejects the sign-in, Cursor Auto, Cursor API, and Grok Bot say "Cursor sign-in expired — open Cursor to refresh". "Open Cursor once so this Mac can read usage" appears only when this Mac has no Cursor token. If Cursor’s state database does not answer in time, those rows say the app couldn’t read Cursor state. The token is kept in memory and read from disk again only after a rejection, or when that database file changes.
+- Cursor usage matches the request Cursor 3.27.6 sends from its always-local client. The methods stay `GetCurrentPeriodUsage` and `GetSandUsageStatus` on `api2.cursor.sh`. The body is empty protobuf (`application/proto`) over HTTP/1.1, with `User-Agent: connect-es/1.6.1`, `traceparent`, `x-client-key`, `Accept-Encoding: gzip,br`, device memory, and a lowercase `x-request-id`. `x-cursor-checksum` is unchanged. The machine id prefers sha256 of this Mac's IOPlatformUUID, and the mac id prefers sha256 of the first eligible MAC; `storage.json` is the fallback. When Cursor rejects the call, the row keeps "Cursor sign-in expired — open Cursor to refresh" and adds the HTTP status and Cursor's error text. The token is not shown. The refresh token is still not read.
+- When Cursor stores the access token with safe storage, macOS asks once to allow reading the "Cursor Safe Storage" Keychain item. The decrypted token stays in memory and is not written to disk or the log. A plaintext token does not ask. If the prompt is denied, Cursor Auto, Cursor API, and Grok Bot say "Allow Keychain access to read Cursor usage" until you click Refresh and allow it. A missing Keychain item is a different message. The app does not refresh the sign-in itself.
+
 ## [1.2] - 2026-10-10
 
 ### Fixed
@@ -32,7 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Spike Alerts start over when a pool resets during the day. A drop in usage, or a new billing period, becomes the new baseline, so later climbs are not measured against the reading from before the reset.
 - Grok usage reads the installed grok CLI version when it can, and falls back to the built-in version when it cannot. If xAI rejects that version as outdated, the app tries once more with a newer version, or the Grok row tells you to run `grok update` and then Refresh.
 
-[Unreleased]: https://github.com/KevinLogan84/grok-cursor-usage/compare/v1.2...HEAD
+[Unreleased]: https://github.com/KevinLogan84/grok-cursor-usage/compare/v1.3...HEAD
+[1.3]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.3
 [1.2]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.2
 [1.1]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.1
 [1.0]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.0

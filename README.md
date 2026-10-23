@@ -5,7 +5,7 @@ A macOS menu bar app that shows how much of your Cursor and Grok plan you have u
 ![The Grok & Cursor Usage menu, showing Cursor and Grok usage bars](docs/screenshot.png)
 
 - **Menu bar at a glance.** Shows the pool you used most recently and its percent, such as `CUR` / `11%`. It switches when a different pool moves.
-- **Every pool in one menu.** Cursor Auto, Cursor API, Grok, and Grok Bot. When a service reports your plan name, such as Cursor Pro or SuperGrok, that becomes the title. Pools your account does not have are left off. Grok Bot still appears, with what to do, when Cursor is signed out.
+- **Every pool in one menu.** Cursor Auto, Cursor API, Grok, and Grok Bot. When a service reports your plan name, such as Cursor Pro or SuperGrok, that becomes the title. Pools your account does not have are left off. Grok Bot still appears, with what to do, when this Mac has no Cursor token or the sign-in has expired.
 - **Pace.** Each bar says whether you are over, under, or on pace for its billing period, and when it resets.
 - **Spike Alerts.** An optional notification when a pool climbs during the day. Choose once or at every step, and set the step from 5% to 50%.
 - **Settings.** Text size from 75% to 125%, System, Light, or Dark appearance, Open at Login, and Send Feedback.
@@ -50,9 +50,9 @@ When a newer version is available, the top of the menu says **Update available**
 | --- | --- |
 | Cursor Auto and Cursor API | Cursor is signed in on this Mac. |
 | Grok | The grok CLI is signed in (`grok login`, which writes `~/.grok/auth.json`). Grok.app works too if you turn it on, as described below. |
-| Grok Bot | Cursor reports a Grok Bot allowance for your account. If Cursor is signed out, the row says to open Cursor and sign in. It is left off only when Cursor is signed in and the account has no Grok Bot allowance. |
+| Grok Bot | Cursor reports a Grok Bot allowance for your account. If this Mac has no Cursor token, the row says to open Cursor once so this Mac can read usage. If the sign-in has expired, the row says “Cursor sign-in expired — open Cursor to refresh”. It is left off only when Cursor is signed in and the account has no Grok Bot allowance. |
 
-Cursor’s token is read from `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`.
+Cursor’s token is read from `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`. Usage requests go to the same Cursor dashboard methods Cursor 3.27.6 uses: empty protobuf posts to `api2.cursor.sh`, over HTTP/1.1, with the desktop headers Cursor’s always-local client sends. `x-cursor-checksum` uses sha256 of this Mac’s platform UUID and primary MAC when those can be read, and otherwise the machine ids in the `storage.json` file next to the database. A bearer token by itself is rejected even while Cursor is signed in. When that access token is stored with Cursor’s safe storage, macOS asks once to allow this app to read the “Cursor Safe Storage” Keychain item. Allow it. The decrypted token stays in memory for this run and is not written to disk. A plaintext token does not ask. The refresh token is not read, and this app does not refresh the sign-in itself.
 
 By default, Grok uses only the grok CLI login, and the app needs no special permissions. To use Grok.app’s sign-in instead, choose **CLI + Grok.app** under **Grok Sign-In** in the **Settings** tab, then turn on **Full Disk Access** for Grok & Cursor Usage in **System Settings → Privacy & Security**. Grok.app keeps its grok.com session in a cookie file that other apps cannot read without that permission. In that mode, the CLI is still tried first.
 
@@ -74,9 +74,15 @@ The `GROK_HOME` and `GROK_AUTH_JSON` environment variables are honored, but an a
 
 **Grok.app is signed in, but Grok is blank.** Choose **CLI + Grok.app** under **Grok Sign-In**, then turn on **Grok & Cursor Usage** in **System Settings → Privacy & Security → Full Disk Access**. The **Open Full Disk Access Settings** button in Settings goes straight there.
 
-**Cursor says to open Cursor.** Open Cursor once and stay signed in, then click **Refresh**.
+**Cursor says to open Cursor once.** This Mac has no Cursor token yet. Open Cursor once and stay signed in, then click **Refresh**.
 
-**Grok Bot says to open Cursor.** Cursor is signed out, or its sign-in has expired. Open Cursor and sign in, then click **Refresh**. Grok Bot is hidden only when Cursor is signed in and your account has no Grok Bot allowance.
+**Cursor says the sign-in expired.** Cursor Auto, Cursor API, and Grok Bot say “Cursor sign-in expired — open Cursor to refresh”. When Cursor answered, the same line includes the HTTP status and Cursor’s error text. The token is not included. Open Cursor so it can refresh the sign-in, then click **Refresh**. This app does not refresh it for you.
+
+**macOS asks to use the Keychain.** Cursor 3.27.6 can store the access token with safe storage. The first time this app needs that token, macOS asks you to allow reading the “Cursor Safe Storage” item. Click Allow once. Later refreshes, including the minute timer, use the copy kept in memory and do not ask again. If you choose Don’t Allow, Cursor Auto, Cursor API, and Grok Bot say “Allow Keychain access to read Cursor usage”. Click **Refresh** to be asked again. A missing Keychain item is a different message. A plaintext token never shows this prompt. The refresh token is not read.
+
+**Cursor says it couldn’t read Cursor state.** Cursor’s database didn’t answer in time. Quit Cursor if it is open, then click **Refresh**.
+
+**Grok Bot says it couldn’t reach Cursor.** The request failed. Check your connection, then click **Refresh**. Grok Bot is hidden only when Cursor is signed in and your account has no Grok Bot allowance.
 
 **Grok says to update the CLI.** xAI rejected the grok CLI version. Run `grok update` in Terminal, then click **Refresh**.
 
@@ -86,7 +92,7 @@ The `GROK_HOME` and `GROK_AUTH_JSON` environment variables are honored, but an a
 
 The project runs no server and includes no analytics or tracking.
 
-- **What it reads:** Cursor’s local database (`state.vscdb`), the grok CLI’s `auth.json`, and the installed grok CLI version when that metadata or the `grok` command is available. Grok.app’s cookie file is read only if you choose **CLI + Grok.app** and grant Full Disk Access. It does not change any of these files.
+- **What it reads:** Cursor’s local database (`state.vscdb`) for the access token, this Mac’s platform UUID and MAC address (hashed for the desktop checksum, the same way Cursor does), Cursor’s `storage.json` beside the database when those live ids are not available, the installed Cursor version from `Cursor.app` when that file is present, the grok CLI’s `auth.json`, and the installed grok CLI version when that metadata or the `grok` command is available. When the access token is a safe-storage value, it also reads the “Cursor Safe Storage” item in the login Keychain, after you click Allow. That password and the decrypted token stay in memory only. Grok.app’s cookie file is read only if you choose **CLI + Grok.app** and grant Full Disk Access. It does not change any of these files, and it does not read Cursor’s refresh token.
 - **Where it connects:** Cursor (`api2.cursor.sh`) and xAI (`grok.com`, `auth.x.ai`), using those sign-ins to request your usage. It also asks GitHub (`api.github.com`) whether a newer public release exists. That request is unauthenticated and includes no usage, sign-in, or account name.
 - **What it stores:** Settings and alert state in the app’s preferences. If iCloud is enabled, the latest usage numbers go to your own iCloud key-value store for the iPhone viewer. Sign-in tokens are never written to iCloud. The update check stores when it last looked, and the public release note if a newer version is available.
 

@@ -789,13 +789,53 @@ enum SubscriptionPlanName {
     }
 }
 
+/// HTTP status and a redacted server message. Never holds the access token.
+struct CursorServerRejection: Sendable, Equatable {
+    var statusCode: Int
+    var serverMessage: String
+}
+
 enum QuotaUnavailableCopy {
     static let grokUnavailable = "Grok usage is unavailable"
     static let grokNeedsSignIn = "Sign in with the grok CLI or Grok.app"
     static let grokCLISignInAgain = "Run grok login in Terminal, or turn on Grok.app in Settings"
     static let grokCLIOutdated = "Update the grok CLI (run grok update), then Refresh"
-    static let grokBotNeedsCursorSignIn = "Open Cursor and sign in, then Refresh"
-    static let grokBotUnavailable = "Grok Bot usage is unavailable"
+
+    /// This Mac has no Cursor access token. Not used for an expired sign-in.
+    static let cursorNoToken = "Open Cursor once so this Mac can read usage"
+    /// JWT `exp` has passed, or Cursor returned 401/403. Opaque tokens take this path.
+    static let cursorSignInExpired = "Cursor sign-in expired — open Cursor to refresh"
+    /// `state.vscdb` did not answer before the read timed out.
+    static let cursorStateUnreadable = "Couldn't read Cursor state. Quit Cursor if it is open, then Refresh."
+    static let cursorUnreachable = "Couldn't reach Cursor. Check your connection, then Refresh."
+    static let cursorPoolMissing = "Cursor usage didn't include a pool"
+    /// The macOS Allow sheet was cancelled or refused. Not a missing token.
+    static let cursorKeychainDenied = "Allow Keychain access to read Cursor usage"
+    /// The safe-storage item is not in the login Keychain.
+    static let cursorKeychainMissing = "Cursor's Keychain item was not found. Open Cursor, then Refresh."
+    /// The item was found, but the stored access token did not decrypt.
+    static let cursorKeychainLocked = "Cursor's saved sign-in could not be unlocked."
+
+    static let grokBotNoToken = cursorNoToken
+    static let grokBotSignInExpired = cursorSignInExpired
+    static let grokBotStateUnreadable = cursorStateUnreadable
+    static let grokBotUnreachable = "Couldn't reach Cursor for Grok Bot usage. Check your connection, then Refresh."
+
+    /// Keeps the sentence above, and appends the HTTP status when Cursor answered.
+    /// A nil rejection (a local JWT expiry, a timeout with no response) stays exact.
+    static func explained(_ base: String, _ rejection: CursorServerRejection?) -> String {
+        guard let rejection else { return base }
+        let detail = rejection.serverMessage
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let suffix = detail.isEmpty
+            ? " (HTTP \(rejection.statusCode))"
+            : " (HTTP \(rejection.statusCode): \(detail))"
+        let combined = base + suffix
+        let limit = 180
+        guard combined.count > limit else { return combined }
+        return String(combined.prefix(limit - 3)) + "..."
+    }
 
     static func superGrok(hasGrokBilling: Bool, hasGrokSession: Bool) -> String {
         if !hasGrokBilling && !hasGrokSession {

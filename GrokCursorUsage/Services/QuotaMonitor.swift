@@ -1,13 +1,14 @@
 import Foundation
+import Observation
 
 struct QuotaRefreshSources: Sendable {
-    var periodUsage: @Sendable () async -> Data?
+    var periodUsage: @Sendable () async -> CursorDashboardResult
     var sandUsage: @Sendable () async -> SandUsageFetch
     var grokBilling: @Sendable () async -> GrokBillingFetch
     var hasGrokSession: @Sendable () -> Bool
 
     init(
-        periodUsage: @escaping @Sendable () async -> Data?,
+        periodUsage: @escaping @Sendable () async -> CursorDashboardResult,
         sandUsage: @escaping @Sendable () async -> SandUsageFetch,
         grokBilling: @escaping @Sendable () async -> GrokBillingFetch,
         hasGrokSession: @escaping @Sendable () -> Bool
@@ -104,14 +105,17 @@ final class QuotaMonitor {
         timer = nil
     }
 
-    func refresh() async {
+    func refresh(userInitiated: Bool = false) async {
         if isRefreshing { return }
         isRefreshing = true
         defer { isRefreshing = false }
+        if userInitiated {
+            await CursorQuotaClient.allowKeychainPrompt()
+        }
 
         let sources = self.sources
         let timeout = fetchTimeout
-        var period: Data?
+        var period: CursorDashboardResult?
         var sand: SandUsageFetch?
         var grok: GrokBillingFetch?
         var havePeriod = false
@@ -123,10 +127,11 @@ final class QuotaMonitor {
             group.addTask {
                 await Task.detached {
                     switch await QuotaFetchTimeout.race(timeout: timeout, work: sources.periodUsage) {
-                    case .finished(let data):
-                        return QuotaFetch.period(data)
+                    case .finished(let result):
+                        return QuotaFetch.period(result)
                     case .timedOut:
-                        return QuotaFetch.period(nil)
+                        // Deadline passed. A token-read timeout is `.timedOut` on the result.
+                        return QuotaFetch.period(.failed(nil))
                     }
                 }.value
             }
@@ -134,17 +139,17 @@ final class QuotaMonitor {
                 await Task.detached {
                     switch await QuotaFetchTimeout.race(timeout: timeout, work: sources.sandUsage) {
                     case .finished(let fetch):
-                        if case .failed = fetch {
+                        if case .failed(_) = fetch {
                             switch await QuotaFetchTimeout.race(timeout: timeout, work: sources.sandUsage) {
                             case .finished(let retry):
                                 return QuotaFetch.sand(retry)
                             case .timedOut:
-                                return QuotaFetch.sand(.failed)
+                                return QuotaFetch.sand(.failed(nil))
                             }
                         }
                         return QuotaFetch.sand(fetch)
                     case .timedOut:
-                        return QuotaFetch.sand(.failed)
+                        return QuotaFetch.sand(.failed(nil))
                     }
                 }.value
             }
@@ -187,7 +192,7 @@ final class QuotaMonitor {
     private var included: [QuotaKind: QuotaBar] = [:]
 
     private func applyFetched(
-        period: Data?,
+        period: CursorDashboardResult?,
         havePeriod: Bool,
         sand: SandUsageFetch?,
         haveSand: Bool,
@@ -195,22 +200,41 @@ final class QuotaMonitor {
         haveGrok: Bool,
         grokSession: Bool
     ) {
-        if havePeriod {
+        if havePeriod, let period {
             included[.cursorModels] = nil
             included[.otherModels] = nil
-            let models = period.flatMap { QuotaParsing.cursorBars(from: $0) } ?? []
-            if models.isEmpty {
-                included[.cursorModels] = .unavailable(
-                    .cursorModels,
-                    message: period == nil
-                        ? "Open Cursor once so this Mac can read usage"
-                        : "Cursor usage didn't include a pool",
-                    title: "Cursor"
-                )
-            } else {
-                for bar in models {
-                    included[bar.kind] = bar
+            switch period {
+            case .success(let data):
+                let models = QuotaParsing.cursorBars(from: data) ?? []
+                if models.isEmpty {
+                    included[.cursorModels] = .unavailable(
+                        .cursorModels,
+                        message: QuotaUnavailableCopy.cursorPoolMissing,
+                        title: "Cursor"
+                    )
+                } else {
+                    for bar in models {
+                        included[bar.kind] = bar
+                    }
                 }
+            case .noToken:
+                applyCursorUnavailable(QuotaUnavailableCopy.cursorNoToken)
+            case .expired(let rejection):
+                applyCursorUnavailable(
+                    QuotaUnavailableCopy.explained(QuotaUnavailableCopy.cursorSignInExpired, rejection)
+                )
+            case .timedOut:
+                applyCursorUnavailable(QuotaUnavailableCopy.cursorStateUnreadable)
+            case .keychainDenied:
+                applyCursorUnavailable(QuotaUnavailableCopy.cursorKeychainDenied)
+            case .keychainMissing:
+                applyCursorUnavailable(QuotaUnavailableCopy.cursorKeychainMissing)
+            case .keychainLocked:
+                applyCursorUnavailable(QuotaUnavailableCopy.cursorKeychainLocked)
+            case .failed(let rejection):
+                applyCursorUnavailable(
+                    QuotaUnavailableCopy.explained(QuotaUnavailableCopy.cursorUnreachable, rejection)
+                )
             }
         }
         if haveGrok, let grok {
@@ -251,17 +275,46 @@ final class QuotaMonitor {
         }
         if haveSand, let sand {
             switch sand {
-            case .needsSignIn:
+            case .noToken:
                 included[.grokBot] = .unavailable(
                     .grokBot,
-                    message: QuotaUnavailableCopy.grokBotNeedsCursorSignIn,
-                    title: "Grok Bot"
+                    message: QuotaUnavailableCopy.grokBotNoToken
                 )
-            case .failed:
+            case .expired(let rejection):
                 included[.grokBot] = .unavailable(
                     .grokBot,
-                    message: QuotaUnavailableCopy.grokBotUnavailable,
-                    title: "Grok Bot"
+                    message: QuotaUnavailableCopy.explained(
+                        QuotaUnavailableCopy.grokBotSignInExpired,
+                        rejection
+                    )
+                )
+            case .timedOut:
+                included[.grokBot] = .unavailable(
+                    .grokBot,
+                    message: QuotaUnavailableCopy.grokBotStateUnreadable
+                )
+            case .keychainDenied:
+                included[.grokBot] = .unavailable(
+                    .grokBot,
+                    message: QuotaUnavailableCopy.cursorKeychainDenied
+                )
+            case .keychainMissing:
+                included[.grokBot] = .unavailable(
+                    .grokBot,
+                    message: QuotaUnavailableCopy.cursorKeychainMissing
+                )
+            case .keychainLocked:
+                included[.grokBot] = .unavailable(
+                    .grokBot,
+                    message: QuotaUnavailableCopy.cursorKeychainLocked
+                )
+            case .failed(let rejection):
+                included[.grokBot] = .unavailable(
+                    .grokBot,
+                    message: QuotaUnavailableCopy.explained(
+                        QuotaUnavailableCopy.grokBotUnreachable,
+                        rejection
+                    )
                 )
             case .payload(let data):
                 // A signed-in payload with no Grok Bot allowance omits the row.
@@ -279,6 +332,11 @@ final class QuotaMonitor {
             saveFocus(next)
         }
         evaluateBurns()
+    }
+
+    private func applyCursorUnavailable(_ message: String) {
+        included[.cursorModels] = .unavailable(.cursorModels, message: message)
+        included[.otherModels] = .unavailable(.otherModels, message: message)
     }
 
     private static let menuBarKindKey = "com.grokcursorusage.menuBar.kind"
@@ -362,7 +420,7 @@ final class QuotaMonitor {
 }
 
 private enum QuotaFetch: Sendable {
-    case period(Data?)
+    case period(CursorDashboardResult)
     case sand(SandUsageFetch)
     case grok(GrokBillingFetch, hasSession: Bool)
 }
