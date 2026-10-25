@@ -97,7 +97,12 @@ struct QuotaBar: Equatable, Identifiable {
         unavailable(kind, message: loadingMessage)
     }
 
-    static func unavailable(_ kind: QuotaKind, message: String, title: String? = nil) -> QuotaBar {
+    static func unavailable(
+        _ kind: QuotaKind,
+        message: String,
+        title: String? = nil,
+        reset: Date? = nil
+    ) -> QuotaBar {
         QuotaBar(
             kind: kind,
             title: title ?? kind.title,
@@ -108,7 +113,7 @@ struct QuotaBar: Equatable, Identifiable {
             subtitle: "",
             detail: message,
             periodStart: nil,
-            periodEnd: nil,
+            periodEnd: reset,
             state: .unavailable(message)
         )
     }
@@ -435,6 +440,16 @@ enum QuotaParsing {
 
     static func jsonObject(from data: Data) -> [String: Any]? {
         (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    /// Cursor sent `enabled`, `hasAccess`, or `entitled` as false. That account
+    /// has no Grok Bot allowance, which is not a failed or empty reading.
+    static func grokBotHasNoAllowance(_ data: Data) -> Bool {
+        guard let root = jsonObject(from: data) else { return false }
+        if root["enabled"] as? Bool == false { return true }
+        if root["hasAccess"] as? Bool == false { return true }
+        if root["entitled"] as? Bool == false { return true }
+        return false
     }
 
     static func grokBotBar(from data: Data, now: Date = .now) -> QuotaBar? {
@@ -800,6 +815,8 @@ enum QuotaUnavailableCopy {
     static let grokNeedsSignIn = "Sign in with the grok CLI or Grok.app"
     static let grokCLISignInAgain = "Run grok login in Terminal, or turn on Grok.app in Settings"
     static let grokCLIOutdated = "Update the grok CLI (run grok update), then Refresh"
+    /// The last ready week has ended and billing did not return a new sample.
+    static let grokWeekReset = "Week reset, sign in to grok CLI"
 
     /// This Mac has no Cursor access token. Not used for an expired sign-in.
     static let cursorNoToken = "Open Cursor once so this Mac can read usage"
@@ -820,6 +837,8 @@ enum QuotaUnavailableCopy {
     static let grokBotSignInExpired = cursorSignInExpired
     static let grokBotStateUnreadable = cursorStateUnreadable
     static let grokBotUnreachable = "Couldn't reach Cursor for Grok Bot usage. Check your connection, then Refresh."
+    /// The last ready week has ended and Cursor did not return a new Grok Bot sample.
+    static let grokBotWeekReset = "Week reset, open Cursor to refresh"
 
     /// Keeps the sentence above, and appends the HTTP status when Cursor answered.
     /// A nil rejection (a local JWT expiry, a timeout with no response) stays exact.

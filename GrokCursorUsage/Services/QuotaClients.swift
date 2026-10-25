@@ -638,6 +638,47 @@ enum CursorDashboardLog {
     #endif
 }
 
+/// Unified log for grok CLI auth and grok.com billing. Same subsystem as the
+/// dashboard log. `log stream` filters on the category. Tokens, cookies, and
+/// auth-file contents are never written here.
+enum GrokBillingLog {
+    static let subsystem = CursorDashboardLog.subsystem
+    static let category = "grok-billing"
+
+    #if canImport(OSLog)
+    private static let logger = Logger(subsystem: subsystem, category: category)
+    #endif
+
+    static func recordMissingAuthFile() {
+        #if canImport(OSLog)
+        logger.log(level: .error, "[grok-billing] grok CLI auth.json is missing")
+        #endif
+    }
+
+    /// A grok.com billing response that is not usable. The body is not logged:
+    /// a challenge page can echo the cookie.
+    static func recordWebBillingRejection(statusCode: Int, htmlChallenge: Bool) {
+        #if canImport(OSLog)
+        if htmlChallenge {
+            logger.log(
+                level: .error,
+                "[grok-billing] web billing HTTP \(statusCode, privacy: .public) HTML challenge"
+            )
+        } else {
+            logger.log(
+                level: .error,
+                "[grok-billing] web billing HTTP \(statusCode, privacy: .public)"
+            )
+        }
+        #endif
+    }
+
+    /// grok.com answers a rejected cookie with a challenge page.
+    static func isHTMLChallenge(_ data: Data) -> Bool {
+        data.starts(with: Data("<!".utf8)) || data.starts(with: Data("<html".utf8))
+    }
+}
+
 /// Headers Cursor 3.27.6 attaches to every `DashboardService` call.
 ///
 /// The running IDE sends these from `cursor-always-local`, not from the
@@ -2249,7 +2290,11 @@ enum GrokQuotaClient {
     }
 
     private static func cliSession() async -> CLISession? {
-        for authURL in GrokCLIAuth.authFileURLs() {
+        let urls = GrokCLIAuth.authFileURLs()
+        var sawAuthFile = false
+        for authURL in urls {
+            guard FileManager.default.fileExists(atPath: authURL.path) else { continue }
+            sawAuthFile = true
             guard let raw = try? Data(contentsOf: authURL),
                   let root = try? JSONSerialization.jsonObject(with: raw) as? [String: Any]
             else { continue }
@@ -2270,6 +2315,9 @@ enum GrokQuotaClient {
             if let token = fields.token {
                 return CLISession(token: token, userID: fields.userID)
             }
+        }
+        if !sawAuthFile {
+            GrokBillingLog.recordMissingAuthFile()
         }
         return nil
     }

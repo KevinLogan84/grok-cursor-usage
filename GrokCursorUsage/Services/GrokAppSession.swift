@@ -382,13 +382,17 @@ enum GrokWebBillingClient {
 
     private static func send(_ request: URLRequest) async -> Data? {
         guard let (data, response) = try? await session.data(for: request),
-              let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode),
-              !data.isEmpty
+              let http = response as? HTTPURLResponse
         else { return nil }
-        if data.starts(with: Data("<!".utf8)) || data.starts(with: Data("<html".utf8)) {
+        let htmlChallenge = GrokBillingLog.isHTMLChallenge(data)
+        if !(200..<300).contains(http.statusCode) || htmlChallenge {
+            GrokBillingLog.recordWebBillingRejection(
+                statusCode: http.statusCode,
+                htmlChallenge: htmlChallenge
+            )
             return nil
         }
+        guard !data.isEmpty else { return nil }
         return data
     }
 }

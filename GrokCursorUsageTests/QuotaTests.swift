@@ -73,6 +73,7 @@ struct QuotaTests {
         #expect(bar.subtitle == "Weekly usage")
         #expect(bar.detail.contains("Resets"))
         #expect(bar.detail.contains("left"))
+        #expect(bar.periodEnd == QuotaParsing.parseISODate("2026-08-23T18:22:26.517846+00:00"))
     }
 
     @Test
@@ -98,6 +99,8 @@ struct QuotaTests {
         { "enabled": false, "usagePercent": 10 }
         """.data(using: .utf8)!
         #expect(QuotaParsing.grokBotBar(from: botOff) == nil)
+        #expect(QuotaParsing.grokBotHasNoAllowance(botOff))
+        #expect(!QuotaParsing.grokBotHasNoAllowance(Data("{}".utf8)))
     }
 
     @Test
@@ -607,6 +610,148 @@ struct QuotaTests {
         #expect(bar.subtitle == "Weekly usage")
         #expect(bar.detail.contains("Resets"))
         #expect(bar.detail.contains("left"))
+        #expect(bar.periodEnd == QuotaParsing.parseISODate("2026-08-23T18:24:32.476Z"))
+    }
+
+    /// A missing billing fetch keeps the last Grok sample only while that week's
+    /// reset is still ahead. After the reset, the old percent must not stay up.
+    @Test @MainActor
+    func superGrokReusesLastReadyOnlyWhileResetIsAhead() async throws {
+        let future = Date().addingTimeInterval(6 * 24 * 60 * 60)
+        let past = Date().addingTimeInterval(-2 * 60 * 60)
+
+        let kept = try await refreshedSuperGrok(reset: future)
+        #expect(kept.usedText == "11% used")
+        #expect(kept.state == .ready)
+        let keptReset = try #require(kept.periodEnd)
+        #expect(keptReset > Date())
+
+        let dropped = try await refreshedSuperGrok(reset: past)
+        #expect(dropped.usedText == "—")
+        #expect(dropped.state == .unavailable(QuotaUnavailableCopy.grokWeekReset))
+        #expect(dropped.detail == QuotaUnavailableCopy.grokWeekReset)
+        #expect(dropped.title == "Grok")
+        let droppedReset = try #require(dropped.periodEnd)
+        #expect(droppedReset <= Date())
+    }
+
+    /// No earlier sample means a missing fetch is still the ordinary sign-in hint,
+    /// or no row at all when this Mac has no Grok session.
+    @Test @MainActor
+    func superGrokMissingFetchWithoutAPriorBarDoesNotClaimTheWeekReset() async throws {
+        let signedOut = QuotaRefreshSources(
+            periodUsage: { .noToken },
+            sandUsage: { .noToken },
+            grokBilling: { .unavailable },
+            hasGrokSession: { false }
+        )
+        let (signedOutMonitor, signedOutSuite) = makeMonitor(sources: signedOut)
+        defer { UserDefaults(suiteName: signedOutSuite)?.removePersistentDomain(forName: signedOutSuite) }
+        await signedOutMonitor.refresh()
+        #expect(signedOutMonitor.bars.first { $0.kind == .superGrok } == nil)
+        #expect(!signedOutMonitor.bars.contains { $0.detail == QuotaUnavailableCopy.grokWeekReset })
+
+        let signedIn = QuotaRefreshSources(
+            periodUsage: { .noToken },
+            sandUsage: { .noToken },
+            grokBilling: { .unavailable },
+            hasGrokSession: { true }
+        )
+        let (signedInMonitor, signedInSuite) = makeMonitor(sources: signedIn)
+        defer { UserDefaults(suiteName: signedInSuite)?.removePersistentDomain(forName: signedInSuite) }
+        await signedInMonitor.refresh()
+        let bar = try #require(signedInMonitor.bars.first { $0.kind == .superGrok })
+        #expect(bar.detail == QuotaUnavailableCopy.grokCLISignInAgain)
+        #expect(bar.detail != QuotaUnavailableCopy.grokWeekReset)
+    }
+
+    /// A ready Grok sample with no reset date is not reused when billing goes missing.
+    @Test @MainActor
+    func superGrokWithoutAResetDateIsNotKeptWhenBillingIsMissing() async throws {
+        let billing = OneShotGrokBilling(
+            first: .usage(Data(#"{"creditUsagePercent":11}"#.utf8)),
+            then: .unavailable
+        )
+        let sources = QuotaRefreshSources(
+            periodUsage: { .noToken },
+            sandUsage: { .noToken },
+            grokBilling: { billing.next() },
+            hasGrokSession: { false }
+        )
+        let (monitor, suite) = makeMonitor(sources: sources)
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        await monitor.refresh()
+        let ready = try #require(monitor.bars.first { $0.kind == .superGrok })
+        #expect(ready.usedText == "11% used")
+        #expect(ready.periodEnd == nil)
+        await monitor.refresh()
+        #expect(monitor.bars.first { $0.kind == .superGrok } == nil)
+    }
+
+    /// Grok Bot's unreadable payload uses the same reset-date guard.
+    @Test @MainActor
+    func grokBotReusesLastReadyOnlyWhileResetIsAhead() async throws {
+        let future = Date().addingTimeInterval(6 * 24 * 60 * 60)
+        let past = Date().addingTimeInterval(-2 * 60 * 60)
+
+        let kept = try await refreshedGrokBot(reset: future)
+        #expect(kept.usedText == "11% used")
+        #expect(kept.state == .ready)
+        let keptReset = try #require(kept.periodEnd)
+        #expect(keptReset > Date())
+
+        let dropped = try await refreshedGrokBot(reset: past)
+        #expect(dropped.usedText == "—")
+        #expect(dropped.detail == QuotaUnavailableCopy.grokBotWeekReset)
+        #expect(dropped.state == .unavailable(QuotaUnavailableCopy.grokBotWeekReset))
+        #expect(dropped.title == "Grok Bot")
+    }
+
+    /// No Grok Bot allowance still removes the row, even if last week was ready.
+    @Test @MainActor
+    func grokBotNoAllowanceStillHidesTheRowAfterAReadyWeek() async throws {
+        let future = Date().addingTimeInterval(6 * 24 * 60 * 60)
+        let sand = OneShotSand(
+            first: .payload(grokBotSand(percent: 11, reset: future)),
+            then: .payload(Data(#"{"enabled":false,"usagePercent":4}"#.utf8))
+        )
+        let sources = QuotaRefreshSources(
+            periodUsage: { .noToken },
+            sandUsage: { sand.next() },
+            grokBilling: { .unavailable },
+            hasGrokSession: { false }
+        )
+        let (monitor, suite) = makeMonitor(sources: sources)
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        await monitor.refresh()
+        let ready = try #require(monitor.bars.first { $0.kind == .grokBot })
+        #expect(ready.usedText == "11% used")
+        await monitor.refresh()
+        #expect(!monitor.bars.contains { $0.kind == .grokBot })
+    }
+
+    /// A real Cursor failure replaces Grok Bot. It does not keep last week's percent.
+    @Test @MainActor
+    func grokBotFailureReplacesAKeptWeek() async throws {
+        let future = Date().addingTimeInterval(6 * 24 * 60 * 60)
+        let sand = OneShotSand(
+            first: .payload(grokBotSand(percent: 11, reset: future)),
+            then: .failed(nil)
+        )
+        let sources = QuotaRefreshSources(
+            periodUsage: { .noToken },
+            sandUsage: { sand.next() },
+            grokBilling: { .unavailable },
+            hasGrokSession: { false }
+        )
+        let (monitor, suite) = makeMonitor(sources: sources)
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        await monitor.refresh()
+        #expect(monitor.bars.first { $0.kind == .grokBot }?.state == .ready)
+        await monitor.refresh()
+        let bot = try #require(monitor.bars.first { $0.kind == .grokBot })
+        #expect(bot.detail == QuotaUnavailableCopy.grokBotUnreachable)
+        #expect(bot.detail != QuotaUnavailableCopy.grokBotWeekReset)
     }
 
     @Test
@@ -1980,6 +2125,12 @@ struct QuotaTests {
         )
         #expect(CursorDashboardLog.subsystem == "com.grokcursorusage.app")
         #expect(CursorDashboardLog.category == "cursor-dashboard")
+        #expect(GrokBillingLog.subsystem == CursorDashboardLog.subsystem)
+        #expect(GrokBillingLog.category == "grok-billing")
+        #expect(GrokBillingLog.isHTMLChallenge(Data("<!DOCTYPE html><html>".utf8)))
+        #expect(GrokBillingLog.isHTMLChallenge(Data("<html><body>nope</body></html>".utf8)))
+        #expect(!GrokBillingLog.isHTMLChallenge(Data(#"{"creditUsagePercent":1}"#.utf8)))
+        #expect(!GrokBillingLog.isHTMLChallenge(Data()))
         #expect(logged.statusCode == 401)
         #expect(logged.message == "unauthenticated: Error Bearer [redacted]")
         #expect(!logged.message.contains("abcdefghijklmnopqrstuvwxyz"))
@@ -2404,6 +2555,104 @@ private func gzipData(_ data: Data) throws -> Data {
 }
 
 private struct GzipFailed: Error {}
+
+/// First refresh paints 11% from `reset`. Later billing fetches are `.unavailable`.
+/// The percent stays only while that reset is still ahead.
+@MainActor
+private func refreshedSuperGrok(reset: Date) async throws -> QuotaBar {
+    let billing = OneShotGrokBilling(
+        first: grokBillingJSON(percent: 11, end: reset),
+        then: .unavailable
+    )
+    let sources = QuotaRefreshSources(
+        periodUsage: { .noToken },
+        sandUsage: { .noToken },
+        grokBilling: { billing.next() },
+        hasGrokSession: { false }
+    )
+    let (monitor, suite) = makeMonitor(sources: sources)
+    defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+    await monitor.refresh()
+    let ready = try #require(monitor.bars.first { $0.kind == .superGrok })
+    #expect(ready.usedText == "11% used")
+    #expect(ready.state == .ready)
+    await monitor.refresh()
+    await monitor.refresh()
+    return try #require(monitor.bars.first { $0.kind == .superGrok })
+}
+
+/// First refresh paints 11%. Later sand payloads do not parse, so the bar
+/// falls through to the reset-date guard.
+@MainActor
+private func refreshedGrokBot(reset: Date) async throws -> QuotaBar {
+    let sand = OneShotSand(
+        first: .payload(grokBotSand(percent: 11, reset: reset)),
+        then: .payload(Data("{}".utf8))
+    )
+    let sources = QuotaRefreshSources(
+        periodUsage: { .noToken },
+        sandUsage: { sand.next() },
+        grokBilling: { .unavailable },
+        hasGrokSession: { false }
+    )
+    let (monitor, suite) = makeMonitor(sources: sources)
+    defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+    await monitor.refresh()
+    let ready = try #require(monitor.bars.first { $0.kind == .grokBot })
+    #expect(ready.usedText == "11% used")
+    #expect(ready.state == .ready)
+    await monitor.refresh()
+    await monitor.refresh()
+    return try #require(monitor.bars.first { $0.kind == .grokBot })
+}
+
+private func grokBotSand(percent: Double, reset: Date) -> Data {
+    let stamp = ISO8601DateFormatter().string(from: reset)
+    let json = """
+    { "usagePercent": \(percent), "nextResetTimestampUtc": "\(stamp)" }
+    """
+    return Data(json.utf8)
+}
+
+/// Returns `first` once, then `fallback` forever.
+private final class OneShotGrokBilling: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: GrokBillingFetch?
+    private let fallback: GrokBillingFetch
+
+    init(first: GrokBillingFetch, then fallback: GrokBillingFetch) {
+        value = first
+        self.fallback = fallback
+    }
+
+    func next() -> GrokBillingFetch {
+        lock.lock()
+        defer { lock.unlock() }
+        let current = value
+        value = nil
+        return current ?? fallback
+    }
+}
+
+/// Returns `first` once, then `fallback` forever.
+private final class OneShotSand: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: SandUsageFetch?
+    private let fallback: SandUsageFetch
+
+    init(first: SandUsageFetch, then fallback: SandUsageFetch) {
+        value = first
+        self.fallback = fallback
+    }
+
+    func next() -> SandUsageFetch {
+        lock.lock()
+        defer { lock.unlock() }
+        let current = value
+        value = nil
+        return current ?? fallback
+    }
+}
 
 private func grokBillingJSON(percent: Double, end: Date) -> GrokBillingFetch {
     let stamp = ISO8601DateFormatter().string(from: end)

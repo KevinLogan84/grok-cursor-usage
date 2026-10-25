@@ -242,16 +242,12 @@ final class QuotaMonitor {
             case .usage(let data):
                 if let bar = QuotaParsing.superGrokBar(from: data) {
                     included[.superGrok] = bar
-                } else if grokSession {
-                    included[.superGrok] = .unavailable(
-                        .superGrok,
-                        message: GrokSignInSource.current(defaults).usesGrokApp
-                            ? QuotaUnavailableCopy.grokUnavailable
-                            : QuotaUnavailableCopy.grokCLISignInAgain,
-                        title: "Grok"
-                    )
-                } else {
-                    included[.superGrok] = nil
+                } else if !retainWeeklySample(
+                    .superGrok,
+                    expiredMessage: QuotaUnavailableCopy.grokWeekReset,
+                    title: "Grok"
+                ) {
+                    included[.superGrok] = grokSignInFallback(hasSession: grokSession)
                 }
             case .outdatedClient:
                 included[.superGrok] = .unavailable(
@@ -260,16 +256,12 @@ final class QuotaMonitor {
                     title: "Grok"
                 )
             case .unavailable:
-                if grokSession {
-                    included[.superGrok] = .unavailable(
-                        .superGrok,
-                        message: GrokSignInSource.current(defaults).usesGrokApp
-                            ? QuotaUnavailableCopy.grokUnavailable
-                            : QuotaUnavailableCopy.grokCLISignInAgain,
-                        title: "Grok"
-                    )
-                } else {
-                    included[.superGrok] = nil
+                if !retainWeeklySample(
+                    .superGrok,
+                    expiredMessage: QuotaUnavailableCopy.grokWeekReset,
+                    title: "Grok"
+                ) {
+                    included[.superGrok] = grokSignInFallback(hasSession: grokSession)
                 }
             }
         }
@@ -318,8 +310,17 @@ final class QuotaMonitor {
                 )
             case .payload(let data):
                 // A signed-in payload with no Grok Bot allowance omits the row.
-                // Anything else that still carries usage is shown.
-                included[.grokBot] = QuotaParsing.grokBotBar(from: data)
+                // An unreadable payload keeps the last ready week only until its reset.
+                if let bar = QuotaParsing.grokBotBar(from: data) {
+                    included[.grokBot] = bar
+                } else if QuotaParsing.grokBotHasNoAllowance(data) {
+                    included[.grokBot] = nil
+                } else if !retainWeeklySample(
+                    .grokBot,
+                    expiredMessage: QuotaUnavailableCopy.grokBotWeekReset
+                ) {
+                    included[.grokBot] = nil
+                }
             }
         }
 
@@ -337,6 +338,63 @@ final class QuotaMonitor {
     private func applyCursorUnavailable(_ message: String) {
         included[.cursorModels] = .unavailable(.cursorModels, message: message)
         included[.otherModels] = .unavailable(.otherModels, message: message)
+    }
+
+    /// Ordinary Grok miss when there is no earlier week to keep or expire.
+    /// No session still leaves the row off.
+    private func grokSignInFallback(hasSession: Bool) -> QuotaBar? {
+        guard hasSession else { return nil }
+        return .unavailable(
+            .superGrok,
+            message: GrokSignInSource.current(defaults).usesGrokApp
+                ? QuotaUnavailableCopy.grokUnavailable
+                : QuotaUnavailableCopy.grokCLISignInAgain,
+            title: "Grok"
+        )
+    }
+
+    /// Missing weekly sample. Keeps the previous ready bar only while its reset
+    /// is still ahead. After that reset, shows `expiredMessage` and remembers
+    /// the reset so the next miss stays on that hint. A sample with no reset
+    /// date is not kept. Returns false when the caller should use its ordinary
+    /// fallback (sign-in copy, or no row).
+    private func retainWeeklySample(
+        _ kind: QuotaKind,
+        expiredMessage: String,
+        title: String? = nil
+    ) -> Bool {
+        if let kept = lastReady(kind) {
+            included[kind] = kept
+            return true
+        }
+        if let reset = passedReset(kind) {
+            included[kind] = .unavailable(
+                kind,
+                message: expiredMessage,
+                title: title,
+                reset: reset
+            )
+            return true
+        }
+        return false
+    }
+
+    /// Last ready sample, only while its reset is still in the future.
+    /// Grok and Grok Bot both use this. A sample with no reset date is not kept.
+    private func lastReady(_ kind: QuotaKind, now: Date = .now) -> QuotaBar? {
+        guard let bar = included[kind], bar.state == .ready, let reset = bar.periodEnd else {
+            return nil
+        }
+        return reset > now ? bar : nil
+    }
+
+    /// Reset instant of the current sample once that instant is no longer in the future.
+    /// Kept on the unavailable bar so the next miss still shows the week-reset hint.
+    private func passedReset(_ kind: QuotaKind, now: Date = .now) -> Date? {
+        guard let reset = included[kind]?.periodEnd, reset <= now else {
+            return nil
+        }
+        return reset
     }
 
     private static let menuBarKindKey = "com.grokcursorusage.menuBar.kind"

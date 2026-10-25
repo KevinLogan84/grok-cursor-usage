@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4] - 2026-10-25
+
+### Fixed
+
+- After the weekly reset, a missed Grok or Grok Bot reading no longer keeps last week's percent. The previous bar stays only while its reset is still ahead. Once that reset has passed and the new reading is missing, Grok says "Week reset, sign in to grok CLI" and Grok Bot says "Week reset, open Cursor to refresh". A missed reading before the reset still shows the last percent. The macOS log records when the grok CLI auth file is missing, and when grok.com returns a non-success status or an HTML challenge. Tokens, cookies, and the auth file are not logged.
+
 ## [1.3] - 2026-10-23
 
 ### Fixed
@@ -40,7 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Spike Alerts start over when a pool resets during the day. A drop in usage, or a new billing period, becomes the new baseline, so later climbs are not measured against the reading from before the reset.
 - Grok usage reads the installed grok CLI version when it can, and falls back to the built-in version when it cannot. If xAI rejects that version as outdated, the app tries once more with a newer version, or the Grok row tells you to run `grok update` and then Refresh.
 
-[Unreleased]: https://github.com/KevinLogan84/grok-cursor-usage/compare/v1.3...HEAD
+[Unreleased]: https://github.com/KevinLogan84/grok-cursor-usage/compare/v1.4...HEAD
+[1.4]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.4
 [1.3]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.3
 [1.2]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.2
 [1.1]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.1

@@ -25,8 +25,8 @@ struct GuideView: View {
                     section("What you see") {
                         Text("The menu bar shows the pool you used most recently, and its percent. It switches when another pool’s usage moves. Open it for every pool on this Mac. A pool your account does not have is left off. When Cursor or Grok reports your plan name, that becomes the title.")
                         bullet("Cursor", "Auto and API models are separate rows, titled with your plan, such as Cursor Pro, when Cursor reports it. Sign in to Cursor on this Mac.")
-                        bullet("Grok", "The grok.com pool, titled with your plan, such as SuperGrok, when Grok reports it. Sign in with the grok CLI, or opt in to Grok.app in Settings.")
-                        bullet("Grok Bot", "Shown when Cursor reports a Grok Bot allowance. With no Cursor token, the row says to open Cursor once so this Mac can read usage. When the sign-in has expired, it says “Cursor sign-in expired — open Cursor to refresh”. It is left off only when Cursor is signed in and your account has no Grok Bot allowance.")
+                        bullet("Grok", "The grok.com pool, titled with your plan, such as SuperGrok, when Grok reports it. Sign in with the grok CLI, or opt in to Grok.app in Settings. After the weekly reset, if a new reading is missing, it says “Week reset, sign in to grok CLI”. Until that reset, a missed reading keeps the last percent.")
+                        bullet("Grok Bot", "Shown when Cursor reports a Grok Bot allowance. With no Cursor token, the row says to open Cursor once so this Mac can read usage. When the sign-in has expired, it says “Cursor sign-in expired — open Cursor to refresh”. After the weekly reset, if a new reading is missing, it says “Week reset, open Cursor to refresh”. Until that reset, a missed reading keeps the last percent. It is left off only when Cursor is signed in and your account has no Grok Bot allowance.")
                     }
                     section("Before the bars fill in") {
                         Text("This app has no account of its own. It reads sessions that are already on this Mac, then asks Cursor and Grok for usage.")
@@ -60,7 +60,7 @@ struct GuideView: View {
                     SendFeedbackButton(presentsAsSheet: true)
                         .glassPlainButton(compact: true)
                     section("Privacy") {
-                        Text("The app reads the Cursor and grok CLI sign-ins already on this Mac, plus Grok.app’s if you opt in. It never changes them, and uses them only to ask Cursor and xAI for your usage. If iCloud is enabled, the latest usage numbers, never your sign-ins, go to your own iCloud for the iPhone app. The project runs no server and includes no analytics or tracking. Send Feedback only opens a draft in your mail app, or shows the address to copy if a browser would open instead. The update check only asks GitHub if a newer public release exists.")
+                        Text("The app reads the Cursor and grok CLI sign-ins already on this Mac, plus Grok.app’s if you opt in. It never changes them, and uses them only to ask Cursor and xAI for your usage. If iCloud is enabled, the latest usage numbers, never your sign-ins, go to your own iCloud for the iPhone app. The project runs no server and includes no analytics or tracking. Send Feedback only opens a draft in your mail app, or shows the address to copy if a browser would open instead. The update check only asks GitHub if a newer public release exists. A missing grok CLI login, or an error page from grok.com, is noted in the macOS log without the token, cookies, or auth file.")
                     }
                 }
                 .padding(.horizontal, MenuMetrics.points(20, scale: scale))
