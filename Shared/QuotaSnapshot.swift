@@ -1,10 +1,24 @@
 import Foundation
 
-/// Mac → iPhone snapshot of the four subscription bars. The phone only displays this.
+/// Mac → iPhone snapshot of the subscription readings. The phone only displays this.
 struct QuotaSnapshot: Codable, Equatable, Sendable {
     var version: Int
     var lastUpdated: Date
     var bars: [SnapshotQuotaBar]
+    /// Named shares of the weekly pool. Empty when the Mac had no such split.
+    var poolShares: [QuotaParsing.PoolShare]
+
+    init(
+        version: Int,
+        lastUpdated: Date,
+        bars: [SnapshotQuotaBar],
+        poolShares: [QuotaParsing.PoolShare] = []
+    ) {
+        self.version = version
+        self.lastUpdated = lastUpdated
+        self.bars = bars
+        self.poolShares = poolShares
+    }
 
     static let staleAfter: TimeInterval = 30 * 60
 
@@ -14,6 +28,28 @@ struct QuotaSnapshot: Codable, Equatable, Sendable {
 
     func statusLine(now: Date) -> String {
         QuotaSnapshotStamp.statusLine(lastUpdated: lastUpdated, now: now)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version, lastUpdated, bars, poolShares
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        lastUpdated = try container.decode(Date.self, forKey: .lastUpdated)
+        bars = try container.decode([SnapshotQuotaBar].self, forKey: .bars)
+        poolShares = try container.decodeIfPresent([QuotaParsing.PoolShare].self, forKey: .poolShares) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(version, forKey: .version)
+        try container.encode(lastUpdated, forKey: .lastUpdated)
+        try container.encode(bars, forKey: .bars)
+        if !poolShares.isEmpty {
+            try container.encode(poolShares, forKey: .poolShares)
+        }
     }
 }
 
@@ -27,10 +63,28 @@ struct SnapshotQuotaBar: Codable, Equatable, Sendable, Identifiable {
     var detail: String
     var pace: QuotaPace?
     var unavailableMessage: String?
+    /// Provider period. Nil on snapshots published before the combined bar.
+    var periodStart: Date?
+    var periodEnd: Date?
+    /// This pool's own percent, including values above 100. Nil on older snapshots.
+    var rawUsedPercent: Double?
 
     var id: QuotaKind { kind }
 
     var isReady: Bool { unavailableMessage == nil }
+
+    /// Percent for the combined allowance. Prefers the raw provider value.
+    var allowanceUsedPercent: Double {
+        if let rawUsedPercent { return rawUsedPercent }
+        if let parsed = Self.percent(in: usedText) { return parsed }
+        return min(1, max(0, usedFraction)) * 100
+    }
+
+    private static func percent(in text: String) -> Double? {
+        let number = text.prefix { $0.isNumber || $0 == "." || $0 == "-" }
+        guard !number.isEmpty, number != "-" else { return nil }
+        return Double(number)
+    }
 
     var isLoadingPlaceholder: Bool {
         unavailableMessage == QuotaBar.loadingMessage
@@ -45,7 +99,10 @@ struct SnapshotQuotaBar: Codable, Equatable, Sendable, Identifiable {
         subtitle: String,
         detail: String,
         pace: QuotaPace? = nil,
-        unavailableMessage: String? = nil
+        unavailableMessage: String? = nil,
+        periodStart: Date? = nil,
+        periodEnd: Date? = nil,
+        rawUsedPercent: Double? = nil
     ) {
         self.kind = kind
         self.usedFraction = usedFraction
@@ -56,6 +113,9 @@ struct SnapshotQuotaBar: Codable, Equatable, Sendable, Identifiable {
         self.detail = detail
         self.pace = pace
         self.unavailableMessage = unavailableMessage
+        self.periodStart = periodStart
+        self.periodEnd = periodEnd
+        self.rawUsedPercent = rawUsedPercent
     }
 
     init(_ bar: QuotaBar) {
@@ -67,10 +127,14 @@ struct SnapshotQuotaBar: Codable, Equatable, Sendable, Identifiable {
         subtitle = bar.subtitle
         detail = bar.detail
         pace = bar.pace
+        periodStart = bar.periodStart
+        periodEnd = bar.periodEnd
         if case .unavailable(let message) = bar.state {
             unavailableMessage = message
+            rawUsedPercent = nil
         } else {
             unavailableMessage = nil
+            rawUsedPercent = bar.usedPercent
         }
     }
 }

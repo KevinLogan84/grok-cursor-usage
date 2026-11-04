@@ -58,6 +58,55 @@ enum QuotaPace: Equatable, Codable, Sendable {
         case .onPace: return "on pace"
         }
     }
+
+    /// Color for the pace label only. Pace math is unchanged.
+    /// Green when under. Yellow when on pace, or over by fewer than
+    /// `PaceColorBand.slightOverPoints` (5). Red when over by 5 or more.
+    var colorBand: PaceColorBand {
+        switch self {
+        case .under: return .green
+        case .onPace: return .yellow
+        case .over(let points):
+            return points >= PaceColorBand.slightOverPoints ? .red : .yellow
+        }
+    }
+}
+
+enum PaceColorBand: Equatable, Sendable {
+    case green
+    case yellow
+    case red
+
+    /// Over by fewer than this many points stays yellow. 5 or more is red.
+    static let slightOverPoints = 5
+}
+
+/// Color for a "% used" label from the rounded percent that label shows.
+/// Below 50 stays the caller's existing color. Yellow at 50. Red at 80.
+enum UsageTextLevel: Equatable, Sendable {
+    case unchanged
+    case yellow
+    case red
+
+    static func level(displayedPercent: Int) -> UsageTextLevel {
+        if displayedPercent >= 80 { return .red }
+        if displayedPercent >= 50 { return .yellow }
+        return .unchanged
+    }
+}
+
+/// Single Ultra Usage bar and the total "% used" label.
+/// Green below 50. Yellow at 50. Red at 80. From the rounded percent shown.
+enum UsageFillLevel: Equatable, Sendable {
+    case green
+    case yellow
+    case red
+
+    static func level(displayedPercent: Int) -> UsageFillLevel {
+        if displayedPercent >= 80 { return .red }
+        if displayedPercent >= 50 { return .yellow }
+        return .green
+    }
 }
 
 struct QuotaBar: Equatable, Identifiable {
@@ -558,6 +607,225 @@ enum QuotaParsing {
         )
     }
 
+    /// One ready pool. `usedPercent` is that pool's own usage, not a share of
+    /// a combined allowance. `start`/`end` are that pool's period, when known.
+    struct AllowanceSample: Equatable, Sendable {
+        var usedPercent: Double
+        var start: Date?
+        var end: Date?
+    }
+
+    /// The subscription APIs each report a percent of that reading's own meter.
+    /// They do not send additive shares of one pool.
+    ///
+    /// On the shared weekly plan, Grok, Grok Bot, and Cursor can each report
+    /// the same total, and Cursor's API meter can be a separate reading.
+    /// The card total is the max of the ready readings, never the average,
+    /// and never less than any one of them. Two readings at 2% total 2%.
+    /// A reading that failed to load is not a sample, so it stays out of the
+    /// max and the card can still say why that pool is missing.
+    ///
+    /// Pace compares that max with the average elapsed percent of the ready
+    /// periods, including the first 2% of the window as on pace. Pace is
+    /// omitted unless every sample has a real start and end longer than a
+    /// minute. A sample with no dates still counts in the max; it only drops
+    /// the pace.
+    ///
+    /// Pace label color is separate. Green when under. Yellow when on pace,
+    /// or over by fewer than `PaceColorBand.slightOverPoints` (5). Red when
+    /// over by 5 or more.
+    static func combinedAllowance(
+        _ samples: [AllowanceSample],
+        now: Date
+    ) -> (usedPercent: Double, pace: QuotaPace?)? {
+        guard !samples.isEmpty else { return nil }
+        let used = samples.map(\.usedPercent).max() ?? 0
+        return (used, combinedPace(samples, usedPercent: used, now: now))
+    }
+
+    /// One app's share of the weekly pool, only when a payload named that share.
+    struct PoolShare: Codable, Equatable, Sendable, Identifiable {
+        var kind: QuotaKind
+        var percent: Double
+        var id: QuotaKind { kind }
+    }
+
+    /// Width of each mark on the 0…1 track.
+    ///
+    /// `shares` are percents of one pool. They are drawn only when they are a
+    /// real split: two or more, each at least 0, and they add up to
+    /// `totalPercent`. Their widths then add up to that total's fraction of
+    /// the track (capped at the whole track once the total passes 100).
+    ///
+    /// Nil, an empty list, or readings that do not add up to the total are
+    /// not a split. The track is one mark at the total. Meter readings such
+    /// as 21.1, 21.1, and 0 are that case: they repeat the total, they are
+    /// not shares of it.
+    static func sharedPoolTrackFractions(totalPercent: Double?, shares: [Double]?) -> [Double] {
+        guard let totalPercent, totalPercent.isFinite else { return [] }
+        let total = max(0, totalPercent)
+        if let shares, isAdditiveSplit(shares, totalPercent: total) {
+            let sum = shares.reduce(0, +)
+            let budget = min(1, total / 100)
+            guard sum > 0 else { return shares.map { _ in 0 } }
+            return shares.map { max(0, $0) / sum * budget }
+        }
+        return [min(1, total / 100)]
+    }
+
+    /// True when `shares` are pieces of `totalPercent` and not a second copy of it.
+    static func isAdditiveSplit(_ shares: [Double], totalPercent: Double) -> Bool {
+        guard shares.count >= 2, totalPercent.isFinite else { return false }
+        guard shares.allSatisfy({ $0.isFinite && $0 >= 0 }) else { return false }
+        let total = max(0, totalPercent)
+        guard total + 0.000_001 >= (shares.max() ?? 0) else { return false }
+        let sum = shares.reduce(0, +)
+        let tolerance = max(0.25, total * 0.01)
+        return abs(sum - total) <= tolerance
+    }
+
+    /// Point widths for `fractions` along a track of `usable` points.
+    /// A fraction of 0.21 is 21% of the track. Nothing is stretched to a
+    /// minimum, so the marks cannot draw wider than the percent they name.
+    static func exactSegmentWidths(fractions: [Double], usable: Double) -> [Double] {
+        guard usable > 0 else { return Array(repeating: 0, count: fractions.count) }
+        return fractions.map { fraction in
+            guard fraction.isFinite, fraction > 0 else { return 0 }
+            return fraction * usable
+        }
+    }
+
+    static func sharedPoolSegmentWidths(
+        totalPercent: Double?,
+        shares: [Double]?,
+        usable: Double
+    ) -> [Double] {
+        exactSegmentWidths(
+            fractions: sharedPoolTrackFractions(totalPercent: totalPercent, shares: shares),
+            usable: usable
+        )
+    }
+
+    /// App shares of the weekly pool, or nil when no source named them.
+    ///
+    /// Fields this app already reads, and what they are:
+    /// - GetCurrentPeriodUsage `planUsage.autoPercentUsed`, `apiPercentUsed`,
+    ///   and JSON `totalPercentUsed`: each is one meter's percent. The first
+    ///   two are not additive, and `totalPercentUsed` is not their sum.
+    /// - GetSandUsageStatus `usagePercent`: one allowance percent. `isUnified`
+    ///   and `billingBrand`, when a JSON body includes them, name the plan;
+    ///   they are not a breakdown.
+    /// - grok billing `creditUsagePercent`: one weekly headline.
+    ///   `productUsage` rows (`product`, `usagePercent`) are slices of that
+    ///   headline and do add up. They are drawn here only when every row is
+    ///   named Grok Bot, Cursor, or Other. Build, Chat, and the other grok
+    ///   product names are not relabeled into those three apps.
+    static func explicitPoolShares(
+        periodJSON: Data?,
+        sandJSON: Data?,
+        billingJSON: Data?
+    ) -> [PoolShare]? {
+        _ = periodJSON
+        _ = sandJSON
+        guard let config = billingJSON.flatMap({ billingConfig(from: $0) }),
+              let rows = config["productUsage"] as? [[String: Any]],
+              !rows.isEmpty
+        else { return nil }
+
+        var sums: [QuotaKind: Double] = [:]
+        for row in rows {
+            guard let name = row["product"] as? String,
+                  let percent = firstNumber(row, keys: ["usagePercent", "percentUsed", "usedPercent"]),
+                  percent.isFinite, percent >= 0,
+                  let kind = subscriptionKind(forProductName: name)
+            else { return nil }
+            sums[kind, default: 0] += percent
+        }
+        let ordered = QuotaKind.subscriptionCases.compactMap { kind -> PoolShare? in
+            guard let percent = sums[kind] else { return nil }
+            return PoolShare(kind: kind, percent: percent)
+        }
+        guard ordered.count == sums.count, ordered.count >= 2 else { return nil }
+        return ordered
+    }
+
+    static func subscriptionKind(forProductName name: String) -> QuotaKind? {
+        switch name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "grok bot", "grokbot":
+            return .grokBot
+        case "cursor", "cursor models":
+            return .cursorModels
+        case "other", "other models":
+            return .otherModels
+        default:
+            return nil
+        }
+    }
+
+    /// A non-zero segment is at least this many points on the 0–100% track
+    /// when the track can hold that floor for every non-zero segment.
+    /// The Ultra Usage track uses `exactSegmentWidths` instead, so a printed
+    /// percent is never drawn wider than that percent of the track.
+    static let visibleSegmentMinimum = 4.0
+
+    /// Point widths for `fractions` along a track of `usable` points.
+    /// Zero fractions stay at 0. A positive fraction is at least `minimum`
+    /// points, then shrunk only if those floors would overflow the track.
+    /// Does not change the percents printed next to the bar.
+    static func visibleSegmentWidths(
+        fractions: [Double],
+        usable: Double,
+        minimum: Double = visibleSegmentMinimum
+    ) -> [Double] {
+        guard usable > 0 else { return Array(repeating: 0, count: fractions.count) }
+        let positiveCount = fractions.reduce(0) { $0 + ($1 > 0 ? 1 : 0) }
+        guard positiveCount > 0 else { return Array(repeating: 0, count: fractions.count) }
+        let floor = min(max(0, minimum), usable / Double(positiveCount))
+        let widths = fractions.map { fraction -> Double in
+            guard fraction > 0 else { return 0 }
+            return max(floor, usable * fraction)
+        }
+        let sum = widths.reduce(0, +)
+        guard sum > usable + 0.000_001 else { return widths }
+
+        let protected = widths.map { $0 > 0 ? min($0, floor) : 0.0 }
+        let protectedSum = protected.reduce(0, +)
+        let flexible = zip(widths, protected).map { max(0, $0 - $1) }
+        let flexibleSum = flexible.reduce(0, +)
+        let flexibleBudget = max(0, usable - protectedSum)
+        guard flexibleSum > 0, flexibleBudget > 0 else {
+            let scale = usable / sum
+            return widths.map { $0 * scale }
+        }
+        let scale = flexibleBudget / flexibleSum
+        return zip(protected, flexible).map { $0 + $1 * scale }
+    }
+
+    private static func combinedPace(
+        _ samples: [AllowanceSample],
+        usedPercent: Double,
+        now: Date
+    ) -> QuotaPace? {
+        var expectedSum = 0.0
+        var dated = 0
+        for sample in samples {
+            guard let start = sample.start, let end = sample.end else { return nil }
+            let duration = end.timeIntervalSince(start)
+            guard duration > 60 else { return nil }
+            let elapsed = min(1, max(0, now.timeIntervalSince(start) / duration))
+            expectedSum += elapsed * 100
+            dated += 1
+        }
+        guard dated == samples.count, dated > 0 else { return nil }
+        let expected = expectedSum / Double(dated)
+        // Same early-period rule as `pace`: the first 2% of the window is on pace.
+        if expected < 2 { return .onPace }
+        let delta = Int((usedPercent - expected).rounded())
+        if delta >= 1 { return .over(delta) }
+        if delta <= -1 { return .under(abs(delta)) }
+        return .onPace
+    }
+
     /// Linear pace: used % versus how much of the period has elapsed.
     static func pace(usedPercent: Double, start: Date?, end: Date?, now: Date) -> QuotaPace? {
         guard let start, let end else { return nil }
@@ -592,6 +860,41 @@ enum QuotaParsing {
             return "Resets \(day)"
         }
         return "Resets \(day) (\(remaining) left)"
+    }
+
+    /// One line for pools that reset together. Clock time is America/Chicago,
+    /// to the minute, labeled CT. Days include leftover hours and minutes:
+    /// "Resets Nov 3, 2:49 PM CT · 6d 23h 9m left"
+    static func subscriptionResetLine(reset: Date, now: Date) -> String {
+        let clock = subscriptionResetClock.string(from: reset)
+        let remaining = subscriptionRemainingPhrase(until: reset, now: now)
+        if remaining.isEmpty {
+            return "Resets \(clock) CT"
+        }
+        return "Resets \(clock) CT · \(remaining) left"
+    }
+
+    /// Subscription reset countdown. A day or more is always "Nd Hh Mm",
+    /// including a zero hour or minute. Shorter windows match `remainingPhrase`.
+    static func subscriptionRemainingPhrase(until end: Date, now: Date) -> String {
+        let seconds = end.timeIntervalSince(now)
+        guard seconds > 0 else { return "" }
+        let totalMinutes = Int(seconds / 60)
+        if totalMinutes >= 24 * 60 {
+            let days = totalMinutes / (24 * 60)
+            let hours = (totalMinutes % (24 * 60)) / 60
+            let minutes = totalMinutes % 60
+            return "\(days)d \(hours)h \(minutes)m"
+        }
+        return remainingPhrase(until: end, now: now)
+    }
+
+    /// True when every date prints as the same Chicago minute. An empty list
+    /// does not share a line. Callers pass only the ready pools' resets.
+    static func subscriptionResetsShareOneLine(_ resets: [Date]) -> Bool {
+        guard let first = resets.first else { return false }
+        let clock = subscriptionResetClock.string(from: first)
+        return resets.dropFirst().allSatisfy { subscriptionResetClock.string(from: $0) == clock }
     }
 
     static func remainingPhrase(until end: Date, now: Date) -> String {
@@ -701,6 +1004,22 @@ enum QuotaParsing {
         formatter.locale = .current
         formatter.timeZone = .current
         formatter.setLocalizedDateFormatFromTemplate("MMMd")
+        return formatter
+    }
+
+    private static let chicago: TimeZone = {
+        if let zone = TimeZone(identifier: "America/Chicago") {
+            return zone
+        }
+        return TimeZone(secondsFromGMT: 0) ?? .current
+    }()
+
+    private static var subscriptionResetClock: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.timeZone = chicago
+        formatter.dateFormat = "MMM d, h:mm a"
         return formatter
     }
 }

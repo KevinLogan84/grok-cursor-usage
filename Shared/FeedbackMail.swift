@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(SwiftUI)
 import SwiftUI
+#endif
 #if os(macOS)
 import AppKit
 #elseif os(iOS)
@@ -152,6 +154,8 @@ enum FeedbackMail {
         return NSWorkspace.shared.open(url)
         #elseif os(iOS)
         return await UIApplication.shared.open(url, options: [:])
+        #else
+        return false
         #endif
     }
 
@@ -187,6 +191,8 @@ enum FeedbackMail {
         #elseif os(iOS)
         UIPasteboard.general.string = address
         return true
+        #else
+        return false
         #endif
     }
 
@@ -197,6 +203,7 @@ enum FeedbackMail {
     }
 }
 
+#if canImport(SwiftUI)
 /// Send Feedback button. A mail app opens a draft. A browser, or no handler, shows the address.
 struct SendFeedbackButton: View {
     /// The Guide is a normal window, so a sheet fits. The menu is a borderless panel, so a popover
@@ -368,3 +375,4 @@ private struct FeedbackAddressFallback: View {
         }
     }
 }
+#endif

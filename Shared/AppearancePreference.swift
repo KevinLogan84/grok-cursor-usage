@@ -1,4 +1,13 @@
+import Foundation
+import Observation
+#if canImport(SwiftUI)
 import SwiftUI
+#else
+enum ColorScheme: Equatable {
+    case light
+    case dark
+}
+#endif
 #if os(macOS)
 import AppKit
 #endif
@@ -159,6 +168,7 @@ enum MenuMetrics {
         original * clamp(scale)
     }
 
+    #if canImport(SwiftUI)
     static func font(
         _ original: CGFloat,
         scale: Double,
@@ -171,8 +181,10 @@ enum MenuMetrics {
         }
         return .system(size: size, weight: weight)
     }
+    #endif
 }
 
+#if canImport(SwiftUI)
 private struct MenuScaleKey: EnvironmentKey {
     static let defaultValue = MenuMetrics.defaultScale
 }
@@ -198,3 +210,4 @@ struct AppearancePicker: View {
         .accessibilityLabel("Appearance")
     }
 }
+#endif

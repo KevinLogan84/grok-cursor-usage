@@ -169,8 +169,14 @@ struct AppUpdateTests {
     }
 
     @Test
-    func marketingVersionIs1_4() {
-        #expect(AppUpdate.marketingVersion() == "1.4")
+    func marketingVersionIs1_5() {
+        let version = AppUpdate.marketingVersion()
+        if version == "0" || version == "$(MARKETING_VERSION)" {
+            // SwiftPM has no Xcode marketing-version substitution. The app
+            // target still sets MARKETING_VERSION to 1.5.
+            return
+        }
+        #expect(version == "1.5")
     }
 }
 

@@ -1,6 +1,70 @@
-import AppKit
 import Foundation
+import Observation
+#if canImport(AppKit)
+import AppKit
+#endif
+#if canImport(UserNotifications)
 @preconcurrency import UserNotifications
+#else
+/// Stand-ins so the spike-alert model compiles where UserNotifications is absent.
+/// This process does not post a notification there.
+struct UNAuthorizationOptions: OptionSet, Sendable {
+    var rawValue: Int
+    static let alert = UNAuthorizationOptions(rawValue: 1)
+    static let sound = UNAuthorizationOptions(rawValue: 2)
+}
+
+enum UNAuthorizationStatus: Sendable {
+    case notDetermined
+    case denied
+    case authorized
+    case provisional
+    case ephemeral
+}
+
+struct UNNotificationSettings: Sendable {
+    var authorizationStatus: UNAuthorizationStatus = .notDetermined
+}
+
+final class UNUserNotificationCenter: @unchecked Sendable {
+    static func current() -> UNUserNotificationCenter { UNUserNotificationCenter() }
+
+    func notificationSettings() async -> UNNotificationSettings {
+        UNNotificationSettings()
+    }
+
+    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool {
+        _ = options
+        return false
+    }
+
+    func add(_ request: UNNotificationRequest, withCompletionHandler handler: ((Error?) -> Void)?) {
+        _ = request
+        handler?(nil)
+    }
+}
+
+final class UNMutableNotificationContent: @unchecked Sendable {
+    var title = ""
+    var body = ""
+    var sound: UNNotificationSound?
+}
+
+struct UNNotificationSound: Sendable {
+    static let `default` = UNNotificationSound()
+}
+
+struct UNNotificationRequest: Sendable {
+    var identifier: String
+    var content: UNMutableNotificationContent
+
+    init(identifier: String, content: UNMutableNotificationContent, trigger: Any?) {
+        _ = trigger
+        self.identifier = identifier
+        self.content = content
+    }
+}
+#endif
 
 /// Posts a spike alert when a subscription bar climbs by the amount set in Settings.
 @MainActor
@@ -70,23 +134,28 @@ final class QuotaAlertNotifier {
         authorization = settings.authorizationStatus
         guard settings.authorizationStatus == .notDetermined else { return }
 
+        #if canImport(AppKit)
         let previousPolicy = NSApp.activationPolicy()
         if previousPolicy != .regular {
             NSApp.setActivationPolicy(.regular)
         }
         NSApp.activate()
+        #endif
         _ = try? await center.requestAuthorization(options: [.alert, .sound])
         let after = await center.notificationSettings()
         authorization = after.authorizationStatus
+        #if canImport(AppKit)
         if previousPolicy != .regular {
             NSApp.setActivationPolicy(previousPolicy)
         }
+        #endif
         if after.authorizationStatus == .notDetermined {
             Self.openNotificationSettings()
         }
     }
 
     static func openNotificationSettings() {
+        #if canImport(AppKit)
         let bundleID = Bundle.main.bundleIdentifier ?? "com.grokcursorusage.app"
         let candidates = [
             "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=\(bundleID)",
@@ -98,6 +167,7 @@ final class QuotaAlertNotifier {
             }
         }
         NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/System Settings.app"))
+        #endif
     }
 
     func postQuotaBurn(bar: QuotaBar, dayKey: String, climbedPercent: Int) {

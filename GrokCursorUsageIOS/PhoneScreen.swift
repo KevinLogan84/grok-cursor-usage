@@ -61,7 +61,7 @@ struct PhoneScreen: View {
                     if snapshot.bars.isEmpty {
                         emptyPools
                     } else {
-                        subscriptionCard(snapshot.bars)
+                        subscriptionCard(snapshot)
                     }
                 } else {
                     emptyState
@@ -215,108 +215,344 @@ struct PhoneScreen: View {
         .accessibilityLabel("No usage pools on this Mac")
     }
 
-    private func subscriptionCard(_ bars: [SnapshotQuotaBar]) -> some View {
-        ViewerGlassCard {
-            VStack(alignment: .leading, spacing: IOSGlass.subscriptionRowSpacing) {
-                Text("Subscription Usage")
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(.primary)
-                ForEach(bars) { bar in
-                    quotaRow(bar)
-                }
-            }
-        }
-    }
-
-    private func quotaRow(_ bar: SnapshotQuotaBar) -> some View {
-        VStack(alignment: .leading, spacing: IOSGlass.quotaRowSpacing) {
-            HStack(alignment: .bottom, spacing: 6) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(bar.label)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-                    if !bar.subtitle.isEmpty {
-                        Text(bar.subtitle)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.75)
-                    }
-                }
-                Spacer(minLength: 4)
-                VStack(alignment: .trailing, spacing: 0) {
-                    Text(bar.usedText)
-                        .font(.footnote.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(.primary)
-                    if let pace = bar.pace {
-                        Text(pace.text)
-                            .font(.footnote.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(paceColor(pace))
-                    }
-                }
-            }
-            if bar.isReady {
-                ViewerMeterBar(fill: bar.usedFraction, color: usageBandColor(bar.usedFraction))
-            }
-            if let message = bar.unavailableMessage, !bar.isReady {
-                Text(message)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-            } else if !bar.detail.isEmpty {
-                Text(bar.detail)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.85)
-            }
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(quotaAccessibility(bar))
-    }
-
-    private func quotaAccessibility(_ bar: SnapshotQuotaBar) -> String {
-        if let message = bar.unavailableMessage, !bar.isReady {
-            return "\(bar.label), \(message)"
-        }
-        if let pace = bar.pace {
-            return "\(bar.label) \(bar.usedText), \(pace.text)"
-        }
-        return "\(bar.label) \(bar.usedText)"
+    private func subscriptionCard(_ snapshot: QuotaSnapshot) -> some View {
+        UltraUsagePhoneCard(
+            bars: snapshot.bars,
+            poolShares: snapshot.poolShares,
+            now: now
+        )
     }
 }
 
-private struct ViewerMeterBar: View {
-    let fill: Double
-    let color: Color
+/// One shared weekly bar. The total is the highest ready pool.
+private struct UltraUsagePhoneCard: View {
+    var bars: [SnapshotQuotaBar]
+    var poolShares: [QuotaParsing.PoolShare]
+    var now: Date
+
+    /// Blue, yellow, red. Grok is a meter of the same total, not a fourth share.
+    private static let segmentOrder: [QuotaKind] = [.grokBot, .cursorModels, .otherModels]
+    /// Ready readings that can set the total, including Grok.
+    private static let allowanceOrder: [QuotaKind] = [.grokBot, .cursorModels, .otherModels, .superGrok]
+
+    var body: some View {
+        ViewerGlassCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Ultra Usage")
+                    .font(.title2.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .accessibilityAddTraits(.isHeader)
+
+                combinedBar
+
+                if let shares = splitShares {
+                    legend(shares)
+                }
+
+                if !resetLines.isEmpty {
+                    VStack(spacing: 2) {
+                        ForEach(resetLines, id: \.self) { line in
+                            Text(line)
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.75)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                        }
+                    }
+                }
+
+                if !unavailableNotes.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(unavailableNotes, id: \.self) { note in
+                            Text(note)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var readySamples: [SnapshotQuotaBar] {
+        Self.allowanceOrder.compactMap { kind in
+            guard let bar = bars.first(where: { $0.kind == kind }),
+                  bar.isReady,
+                  !bar.isLoadingPlaceholder
+            else { return nil }
+            return bar
+        }
+    }
+
+    private var combined: (usedPercent: Double, pace: QuotaPace?)? {
+        QuotaParsing.combinedAllowance(
+            readySamples.map {
+                QuotaParsing.AllowanceSample(
+                    usedPercent: $0.allowanceUsedPercent,
+                    start: $0.periodStart,
+                    end: $0.periodEnd
+                )
+            },
+            now: now
+        )
+    }
+
+    /// Named shares that add up to the total. Nil when the snapshot has no split.
+    private var splitShares: [QuotaParsing.PoolShare]? {
+        guard !poolShares.isEmpty else { return nil }
+        let ordered = Self.segmentOrder.compactMap { kind in
+            poolShares.first { $0.kind == kind }
+        }
+        guard ordered.count == poolShares.count,
+              QuotaParsing.isAdditiveSplit(ordered.map(\.percent), totalPercent: combined?.usedPercent ?? -1)
+        else { return nil }
+        return ordered
+    }
+
+    private var drawnSegments: [PhoneSegmentedAllowanceBar.Segment] {
+        if let shares = splitShares {
+            let fractions = QuotaParsing.sharedPoolTrackFractions(
+                totalPercent: combined?.usedPercent,
+                shares: shares.map(\.percent)
+            )
+            return zip(shares, fractions).compactMap { share, fraction in
+                guard fraction > 0 else { return nil }
+                return PhoneSegmentedAllowanceBar.Segment(
+                    id: share.kind.rawValue,
+                    fraction: fraction,
+                    color: segmentColor(share.kind)
+                )
+            }
+        }
+        return QuotaParsing.sharedPoolTrackFractions(totalPercent: combined?.usedPercent, shares: nil)
+            .enumerated()
+            .compactMap { index, fraction in
+                guard fraction > 0 else { return nil }
+                return PhoneSegmentedAllowanceBar.Segment(
+                    id: "total-\(index)",
+                    fraction: fraction,
+                    color: usageFillColor(displayedPercent: displayedTotalPercent)
+                )
+            }
+    }
+
+    private var combinedBar: some View {
+        HStack(alignment: .center, spacing: 10) {
+            PhoneSegmentedAllowanceBar(
+                segments: drawnSegments,
+                height: 10
+            )
+            .frame(maxWidth: .infinity)
+            .accessibilityHidden(true)
+
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(totalUsedText)
+                    .font(.title2.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(totalUsageColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                if let pace = combined?.pace {
+                    Text(pace.text)
+                        .font(.title2.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(subscriptionPaceColor(pace))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(totalAccessibility)
+        }
+    }
+
+    private var totalUsedText: String {
+        guard combined != nil else { return "—" }
+        return "\(displayedTotalPercent)% used"
+    }
+
+    private var displayedTotalPercent: Int {
+        Int((combined?.usedPercent ?? 0).rounded())
+    }
+
+    /// Matches the single bar. The dash stays the current primary color.
+    private var totalUsageColor: Color {
+        guard combined != nil else { return .primary }
+        return usageFillColor(displayedPercent: displayedTotalPercent)
+    }
+
+    private var totalAccessibility: String {
+        guard let combined else { return "Ultra usage unavailable" }
+        if let pace = combined.pace {
+            return "Ultra usage, \(totalUsedText), \(pace.text)"
+        }
+        return "Ultra usage, \(totalUsedText)"
+    }
+
+    /// Ready pools that print as the same Chicago minute share one reset line.
+    private var sharedReset: Date? {
+        let resets = readySamples.compactMap(\.periodEnd)
+        guard resets.count == readySamples.count,
+              QuotaParsing.subscriptionResetsShareOneLine(resets) else {
+            return nil
+        }
+        return resets.first
+    }
+
+    /// The shared Chicago minute, or each distinct reset when the pools differ.
+    private var resetLines: [String] {
+        if let reset = sharedReset {
+            return [QuotaParsing.subscriptionResetLine(reset: reset, now: now)]
+        }
+        var lines: [String] = []
+        for sample in readySamples {
+            guard let reset = sample.periodEnd else { continue }
+            let line = QuotaParsing.subscriptionResetLine(reset: reset, now: now)
+            if !lines.contains(line) {
+                lines.append(line)
+            }
+        }
+        return lines
+    }
+
+    /// Sign-in and week-reset hints for pools that are not ready.
+    private var unavailableNotes: [String] {
+        var lines: [String] = []
+        for kind in QuotaKind.subscriptionCases {
+            guard let bar = bars.first(where: { $0.kind == kind }),
+                  !bar.isReady,
+                  !bar.isLoadingPlaceholder
+            else { continue }
+            let note = bar.unavailableMessage ?? bar.detail
+            guard !note.isEmpty, !lines.contains(note) else { continue }
+            lines.append(note)
+        }
+        return lines
+    }
+
+    private func legend(_ shares: [QuotaParsing.PoolShare]) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            ForEach(shares) { share in
+                legendColumn(share)
+            }
+        }
+    }
+
+    private func legendColumn(_ share: QuotaParsing.PoolShare) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(segmentColor(share.kind))
+                    .frame(width: 9, height: 9)
+                    .accessibilityHidden(true)
+                Text(legendTitle(share.kind))
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            Text(legendPercent(share))
+                .font(.title3.weight(.semibold).monospacedDigit())
+                .foregroundStyle(legendPercentColor(share))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(legendTitle(share.kind)), \(legendPercent(share))")
+    }
+
+    private func legendTitle(_ kind: QuotaKind) -> String {
+        switch kind {
+        case .grokBot: return "Grok Bot"
+        case .cursorModels: return "Cursor"
+        case .otherModels: return "Other"
+        default: return kind.title
+        }
+    }
+
+    private func legendPercent(_ share: QuotaParsing.PoolShare) -> String {
+        "\(Int(share.percent.rounded()))% used"
+    }
+
+    /// The dot keeps the app color. The percent text changes only at 50 and 80.
+    private func legendPercentColor(_ share: QuotaParsing.PoolShare) -> Color {
+        usageLevelColor(
+            displayedPercent: Int(share.percent.rounded()),
+            unchanged: segmentColor(share.kind)
+        )
+    }
+
+    private func segmentColor(_ kind: QuotaKind) -> Color {
+        switch kind {
+        case .grokBot: return .blue
+        case .cursorModels: return .yellow
+        case .otherModels: return .red
+        default: return .gray
+        }
+    }
+}
+
+private struct PhoneSegmentedAllowanceBar: View {
+    struct Segment: Identifiable {
+        var id: String
+        var fraction: Double
+        var color: Color
+    }
+
+    var segments: [Segment]
+    var height: CGFloat
 
     var body: some View {
         GeometryReader { geo in
+            let drawn = segments.filter { $0.fraction > 0 }
+            let widths = QuotaParsing.exactSegmentWidths(
+                fractions: drawn.map(\.fraction),
+                usable: Double(geo.size.width)
+            )
             ZStack(alignment: .leading) {
                 Capsule()
                     .fill(.tertiary)
-                Capsule()
-                    .fill(color)
-                    .frame(width: max(fill > 0 ? 4 : 0, geo.size.width * min(1, max(0, fill))))
+                HStack(spacing: 0) {
+                    ForEach(Array(drawn.enumerated()), id: \.element.id) { index, segment in
+                        Capsule()
+                            .fill(segment.color)
+                            .frame(width: widths.indices.contains(index) ? CGFloat(widths[index]) : 0)
+                    }
+                    Spacer(minLength: 0)
+                }
             }
         }
-        .frame(height: IOSGlass.meterHeight)
-        .accessibilityHidden(true)
+        .frame(height: height)
     }
 }
 
-private func usageBandColor(_ usedFraction: Double) -> Color {
-    let percent = usedFraction * 100
-    if percent < 40 { return .green }
-    if percent < 80 { return .orange }
-    return .red
+/// Subscription pace label. Green under, yellow on pace or slightly over,
+/// red when over by 5 or more.
+private func subscriptionPaceColor(_ pace: QuotaPace) -> Color {
+    switch pace.colorBand {
+    case .green: return .green
+    case .yellow: return .yellow
+    case .red: return .red
+    }
 }
 
-private func paceColor(_ pace: QuotaPace) -> Color {
-    switch pace {
-    case .over: return .orange
-    case .under: return .green
-    case .onPace: return .primary
+private func usageLevelColor(displayedPercent: Int, unchanged: Color) -> Color {
+    switch UsageTextLevel.level(displayedPercent: displayedPercent) {
+    case .unchanged: return unchanged
+    case .yellow: return .yellow
+    case .red: return .red
+    }
+}
+
+/// Single Ultra Usage bar and the total "% used" label.
+private func usageFillColor(displayedPercent: Int) -> Color {
+    switch UsageFillLevel.level(displayedPercent: displayedPercent) {
+    case .green: return .green
+    case .yellow: return .yellow
+    case .red: return .red
     }
 }

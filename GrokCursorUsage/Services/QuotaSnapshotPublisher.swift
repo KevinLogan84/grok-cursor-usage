@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// Writes the subscription bars to this app’s iCloud key-value store for the iPhone.
 @MainActor
@@ -44,6 +45,7 @@ final class QuotaSnapshotPublisher {
         guard isObserving else { return }
         withObservationTracking {
             _ = quotas.bars
+            _ = quotas.poolShares
             _ = quotas.lastUpdated
         } onChange: { [weak self] in
             Task { @MainActor in
@@ -66,7 +68,8 @@ final class QuotaSnapshotPublisher {
         let raw = QuotaSnapshot(
             version: 1,
             lastUpdated: .now,
-            bars: quotas.bars.map(SnapshotQuotaBar.init)
+            bars: quotas.bars.map(SnapshotQuotaBar.init),
+            poolShares: quotas.poolShares
         )
         if !ignoreFirstWriteCap,
            QuotaSnapshotPublishPolicy.shouldWaitForFirstRefresh(
