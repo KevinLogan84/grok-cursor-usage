@@ -60,7 +60,13 @@ struct FeedbackMailTests {
             build: liveBuild,
             systemLine: FeedbackMail.currentSystemLine
         ))
+        #if os(macOS)
         #expect(FeedbackMail.currentSystemLine.hasPrefix("macOS: "))
+        #elseif os(iOS)
+        #expect(FeedbackMail.currentSystemLine.hasPrefix("iOS: "))
+        #else
+        #expect(FeedbackMail.currentSystemLine.hasPrefix("System: "))
+        #endif
         #expect(!liveBody.contains("@"))
         #expect(!liveBody.lowercased().contains("token"))
         #expect(!liveBody.lowercased().contains("cookie"))
@@ -135,7 +141,11 @@ struct FeedbackMailTests {
         #expect(!note.contains("\n"))
         #expect(note.contains("default email app seems to be a browser"))
         #expect(note.contains("Mail > Settings > General > Default email reader"))
+        #if os(macOS)
         #expect(FeedbackMail.handlerExplanation == note)
+        #else
+        #expect(FeedbackMail.handlerExplanation == FeedbackMail.iosHandlerExplanation)
+        #endif
         #expect(!FeedbackMail.iosHandlerExplanation.contains("\n"))
         #expect(FeedbackMail.iosHandlerExplanation.contains("Copy the address"))
         #expect(!FeedbackMail.iosHandlerExplanation.contains("Default email reader"))

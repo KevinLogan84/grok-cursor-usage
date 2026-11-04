@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5] - 2026-11-04
+
+### Changed
+
+- Ultra Usage is one shared weekly bar on the Mac menu and the iPhone viewer. Grok, Grok Bot, and Cursor draw from the same pool. The total is the highest ready reading, so two pools at 2% show 2%. The mark fills that percent of the 0–100% track. Grok Bot, Cursor, and Other are drawn as separate marks only when a payload names those shares and they add up to the total. The total and the bar are green below 50, yellow at 50, and red at 80. Pace is green when under, yellow when on pace or over by fewer than 5 points, and red at 5 or more. The reset line is in Central Time and counts leftover minutes. A pool that is not ready still says what to do next.
+
 ## [1.4] - 2026-10-25
 
 ### Fixed
@@ -46,7 +52,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Spike Alerts start over when a pool resets during the day. A drop in usage, or a new billing period, becomes the new baseline, so later climbs are not measured against the reading from before the reset.
 - Grok usage reads the installed grok CLI version when it can, and falls back to the built-in version when it cannot. If xAI rejects that version as outdated, the app tries once more with a newer version, or the Grok row tells you to run `grok update` and then Refresh.
 
-[Unreleased]: https://github.com/KevinLogan84/grok-cursor-usage/compare/v1.4...HEAD
+[Unreleased]: https://github.com/KevinLogan84/grok-cursor-usage/compare/v1.5...HEAD
+[1.5]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.5
 [1.4]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.4
 [1.3]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.3
 [1.2]: https://github.com/KevinLogan84/grok-cursor-usage/releases/tag/v1.2

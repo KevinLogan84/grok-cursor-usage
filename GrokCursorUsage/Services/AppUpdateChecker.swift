@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// A newer public release, if GitHub has one. Notes are the release body unchanged.
 struct AppUpdateNotice: Equatable, Codable, Sendable {

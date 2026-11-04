@@ -5,8 +5,9 @@ A macOS menu bar app that shows how much of your Cursor and Grok plan you have u
 ![The Grok & Cursor Usage menu, showing Cursor and Grok usage bars](docs/screenshot.png)
 
 - **Menu bar at a glance.** Shows the pool you used most recently and its percent, such as `CUR` / `11%`. It switches when a different pool moves.
-- **Every pool in one menu.** Cursor Auto, Cursor API, Grok, and Grok Bot. When a service reports your plan name, such as Cursor Pro or SuperGrok, that becomes the title. Pools your account does not have are left off. Grok Bot still appears, with what to do, when this Mac has no Cursor token or the sign-in has expired.
-- **Pace.** Each bar says whether you are over, under, or on pace for its billing period, and when it resets.
+- **Ultra Usage.** One weekly bar for the shared pool. Grok, Grok Bot, and Cursor all draw from it. The total is the highest ready reading, so two pools at 2% show 2%. The mark fills that percent of the track. Grok Bot, Cursor, and Other are separate marks only when a reading names those shares and they add up to the total. The percent and the bar are green below 50, yellow from 50, and red from 80.
+- **Pace.** The card says whether that total is over, under, or on pace for the week. Under is green. On pace, or over by fewer than 5 points, is yellow. Over by 5 or more is red.
+- **Reset.** When the ready pools reset on the same minute, one line shows that time in Central Time, including the days, hours, and minutes left.
 - **Spike Alerts.** An optional notification when a pool climbs during the day. Choose once or at every step, and set the step from 5% to 50%.
 - **Settings.** Text size from 75% to 125%, System, Light, or Dark appearance, Open at Login, and Send Feedback.
 - **Updates.** The app tells you when a new version is out. You download it and replace the app. It does not install the update for you.
@@ -49,8 +50,8 @@ When a newer version is available, the top of the menu says **Update available**
 | Pool | Shows up when |
 | --- | --- |
 | Cursor Auto and Cursor API | Cursor is signed in on this Mac. |
-| Grok | The grok CLI is signed in (`grok login`, which writes `~/.grok/auth.json`). Grok.app works too if you turn it on, as described below. After the weekly reset, if a new reading is missing, the row says “Week reset, sign in to grok CLI”. Until that reset, a missed reading keeps the last percent. |
-| Grok Bot | Cursor reports a Grok Bot allowance for your account. If this Mac has no Cursor token, the row says to open Cursor once so this Mac can read usage. If the sign-in has expired, the row says “Cursor sign-in expired — open Cursor to refresh”. After the weekly reset, if a new reading is missing, the row says “Week reset, open Cursor to refresh”. Until that reset, a missed reading keeps the last percent. It is left off only when Cursor is signed in and the account has no Grok Bot allowance. |
+| Grok | The grok CLI is signed in (`grok login`, which writes `~/.grok/auth.json`). Grok.app works too if you turn it on, as described below. After the weekly reset, if a new reading is missing, the card says “Week reset, sign in to grok CLI”. Until that reset, a missed reading keeps the last percent. |
+| Grok Bot | Cursor reports a Grok Bot allowance for your account. If this Mac has no Cursor token, the card says to open Cursor once so this Mac can read usage. If the sign-in has expired, the card says “Cursor sign-in expired — open Cursor to refresh”. After the weekly reset, if a new reading is missing, the card says “Week reset, open Cursor to refresh”. Until that reset, a missed reading keeps the last percent. It is left off only when Cursor is signed in and the account has no Grok Bot allowance. |
 
 Cursor’s token is read from `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb`. Usage requests go to the same Cursor dashboard methods Cursor 3.27.6 uses: empty protobuf posts to `api2.cursor.sh`, over HTTP/1.1, with the desktop headers Cursor’s always-local client sends. `x-cursor-checksum` uses sha256 of this Mac’s platform UUID and primary MAC when those can be read, and otherwise the machine ids in the `storage.json` file next to the database. A bearer token by itself is rejected even while Cursor is signed in. When that access token is stored with Cursor’s safe storage, macOS asks once to allow this app to read the “Cursor Safe Storage” Keychain item. Allow it. The decrypted token stays in memory for this run and is not written to disk. A plaintext token does not ask. The refresh token is not read, and this app does not refresh the sign-in itself.
 
@@ -61,8 +62,8 @@ The `GROK_HOME` and `GROK_AUTH_JSON` environment variables are honored, but an a
 ## Using it
 
 - Usage reloads at launch, every minute, and when you click **Refresh**.
-- The **Usage** tab lists every pool with its reset date. If a pool cannot be read, its row says what to do next.
-- Pace compares percent used with how much of that pool’s period has passed.
+- The **Usage** tab shows **Ultra Usage**: one shared weekly bar, the pace, and the reset. If a pool cannot be read, the card says what to do next.
+- Pace compares the highest ready percent with how much of the week has passed.
 - **Spike Alerts** watches each pool against its first reading today. If a pool resets during the day, the count starts over from the reading after that reset. **Once** notifies a single time when a pool climbs by the amount you set. **Every** notifies again at each further step. The amount moves in steps of 5%, from 5% to 50%, and starts at 15%. The day follows your Mac’s time zone. macOS asks for notification permission when you turn it on. If you declined, the **Settings** tab shows **Open Notification Settings**.
 - The **Settings** tab holds Text Size, Appearance, Grok Sign-In, Open at Login, Spike Alerts, the in-app **Guide**, and **Send Feedback**.
 - When a newer release is out, **Update** appears at the top of the menu, on both the Usage and Settings tabs.
@@ -72,17 +73,17 @@ The `GROK_HOME` and `GROK_AUTH_JSON` environment variables are honored, but an a
 
 **Grok says to run grok login.** The grok CLI login is missing or expired. Run `grok login` in Terminal, then click **Refresh**. Or switch **Grok Sign-In** to **CLI + Grok.app** and grant Full Disk Access.
 
-**Grok says the week reset.** The weekly reset has passed and Grok did not return a new reading. The row says “Week reset, sign in to grok CLI”. Run `grok login` in Terminal, then click **Refresh**. Until that reset, a missed reading keeps the last percent.
+**Grok says the week reset.** The weekly reset has passed and Grok did not return a new reading. The card says “Week reset, sign in to grok CLI”. Run `grok login` in Terminal, then click **Refresh**. Until that reset, a missed reading keeps the last percent.
 
-**Grok Bot says the week reset.** The weekly reset has passed and Cursor did not return a new Grok Bot reading. The row says “Week reset, open Cursor to refresh”. Open Cursor, then click **Refresh**. Until that reset, a missed reading keeps the last percent. The row is still left off when Cursor is signed in and the account has no Grok Bot allowance.
+**Grok Bot says the week reset.** The weekly reset has passed and Cursor did not return a new Grok Bot reading. The card says “Week reset, open Cursor to refresh”. Open Cursor, then click **Refresh**. Until that reset, a missed reading keeps the last percent. Grok Bot is still left off when Cursor is signed in and the account has no Grok Bot allowance.
 
 **Grok.app is signed in, but Grok is blank.** Choose **CLI + Grok.app** under **Grok Sign-In**, then turn on **Grok & Cursor Usage** in **System Settings → Privacy & Security → Full Disk Access**. The **Open Full Disk Access Settings** button in Settings goes straight there.
 
 **Cursor says to open Cursor once.** This Mac has no Cursor token yet. Open Cursor once and stay signed in, then click **Refresh**.
 
-**Cursor says the sign-in expired.** Cursor Auto, Cursor API, and Grok Bot say “Cursor sign-in expired — open Cursor to refresh”. When Cursor answered, the same line includes the HTTP status and Cursor’s error text. The token is not included. Open Cursor so it can refresh the sign-in, then click **Refresh**. This app does not refresh it for you.
+**Cursor says the sign-in expired.** The card says “Cursor sign-in expired — open Cursor to refresh” for Cursor Auto, Cursor API, and Grok Bot. When Cursor answered, the same line includes the HTTP status and Cursor’s error text. The token is not included. Open Cursor so it can refresh the sign-in, then click **Refresh**. This app does not refresh it for you.
 
-**macOS asks to use the Keychain.** Cursor 3.27.6 can store the access token with safe storage. The first time this app needs that token, macOS asks you to allow reading the “Cursor Safe Storage” item. Click Allow once. Later refreshes, including the minute timer, use the copy kept in memory and do not ask again. If you choose Don’t Allow, Cursor Auto, Cursor API, and Grok Bot say “Allow Keychain access to read Cursor usage”. Click **Refresh** to be asked again. A missing Keychain item is a different message. A plaintext token never shows this prompt. The refresh token is not read.
+**macOS asks to use the Keychain.** Cursor 3.27.6 can store the access token with safe storage. The first time this app needs that token, macOS asks you to allow reading the “Cursor Safe Storage” item. Click Allow once. Later refreshes, including the minute timer, use the copy kept in memory and do not ask again. If you choose Don’t Allow, the card says “Allow Keychain access to read Cursor usage”. Click **Refresh** to be asked again. A missing Keychain item is a different message. A plaintext token never shows this prompt. The refresh token is not read.
 
 **Cursor says it couldn’t read Cursor state.** Cursor’s database didn’t answer in time. Quit Cursor if it is open, then click **Refresh**.
 
@@ -90,7 +91,7 @@ The `GROK_HOME` and `GROK_AUTH_JSON` environment variables are honored, but an a
 
 **Grok says to update the CLI.** xAI rejected the grok CLI version. Run `grok update` in Terminal, then click **Refresh**.
 
-**A bar went blank after it used to work.** Cursor and xAI do not publish these usage endpoints, so a change on their side can break a bar. Quit the app, download the latest [release](https://github.com/KevinLogan84/grok-cursor-usage/releases/latest), and replace **Grok & Cursor Usage.app** in `/Applications`. If the menu shows **Update**, that opens the new copy. If you built from source, pull the latest code and run it again. You can also [open an issue](https://github.com/KevinLogan84/grok-cursor-usage/issues).
+**The bar went blank after it used to work.** Cursor and xAI do not publish these usage endpoints, so a change on their side can break a reading. Quit the app, download the latest [release](https://github.com/KevinLogan84/grok-cursor-usage/releases/latest), and replace **Grok & Cursor Usage.app** in `/Applications`. If the menu shows **Update**, that opens the new copy. If you built from source, pull the latest code and run it again. You can also [open an issue](https://github.com/KevinLogan84/grok-cursor-usage/issues).
 
 ## Privacy
 

@@ -1,10 +1,10 @@
-import AppKit
 import Foundation
-import SwiftUI
 import Testing
-import UserNotifications
 #if canImport(FoundationNetworking)
 import FoundationNetworking
+#endif
+#if canImport(UserNotifications)
+import UserNotifications
 #endif
 @testable import GrokCursorUsage
 
@@ -13,6 +13,7 @@ struct QuotaTests {
     func cursorQuotaParsesModelPools() throws {
         let json = """
         {
+          "billingCycleStart": 1788978269000,
           "billingCycleEnd": 1789583069000,
           "planUsage": {
             "autoPercentUsed": 10.523,
@@ -31,6 +32,14 @@ struct QuotaTests {
         #expect(bars[1].usedText == "23% used")
         #expect(bars[0].detail.contains("Resets"))
         #expect(bars[0].detail.contains("left"))
+        let periodStart = QuotaParsing.parseResetValue(1_788_978_269_000)
+        #expect(bars[0].periodStart == periodStart)
+        #expect(bars[1].periodStart == periodStart)
+        #expect(bars[0].periodEnd == QuotaParsing.parseResetValue(1_789_583_069_000))
+        #expect(
+            bars[0].periodStart
+                != QuotaParsing.inferredPeriodStart(for: .cursorModels, reset: bars[0].periodEnd)
+        )
     }
 
     @Test
@@ -2466,6 +2475,473 @@ struct QuotaTests {
             sand: .keychainLocked,
             message: "Cursor's saved sign-in could not be unlocked."
         )
+    }
+
+    /// The total is the highest ready pool. Pace still compares that number
+    /// with the average elapsed percent of the ready periods.
+    @Test
+    func combinedAllowanceUsesTheMaxReadyPool() {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        let end = start.addingTimeInterval(10 * 24 * 60 * 60)
+        let halfway = start.addingTimeInterval(5 * 24 * 60 * 60)
+        let samples = [
+            QuotaParsing.AllowanceSample(usedPercent: 20, start: start, end: end),
+            QuotaParsing.AllowanceSample(usedPercent: 40, start: start, end: end),
+            QuotaParsing.AllowanceSample(usedPercent: 60, start: start, end: end),
+        ]
+        let combined = QuotaParsing.combinedAllowance(samples, now: halfway)
+        #expect(combined?.usedPercent == 60)
+        #expect(combined?.pace == QuotaParsing.pace(usedPercent: 60, start: start, end: end, now: halfway))
+        #expect(combined?.pace == .over(10))
+        for sample in samples {
+            #expect((combined?.usedPercent ?? 0) + 0.000_001 >= sample.usedPercent)
+        }
+
+        let bothTwo = QuotaParsing.combinedAllowance(
+            [
+                QuotaParsing.AllowanceSample(usedPercent: 2, start: start, end: end),
+                QuotaParsing.AllowanceSample(usedPercent: 2, start: start, end: end),
+            ],
+            now: halfway
+        )
+        #expect(bothTwo?.usedPercent == 2)
+        #expect(bothTwo?.pace == .under(48))
+
+        let early = start.addingTimeInterval(60 * 60)
+        let zeros = (0..<3).map { _ in
+            QuotaParsing.AllowanceSample(usedPercent: 0, start: start, end: end)
+        }
+        let justStarted = QuotaParsing.combinedAllowance(zeros, now: early)
+        #expect(justStarted?.usedPercent == 0)
+        #expect(justStarted?.pace == .onPace)
+
+        let halfwayZeros = QuotaParsing.combinedAllowance(zeros, now: halfway)
+        #expect(halfwayZeros?.usedPercent == 0)
+        #expect(halfwayZeros?.pace == .under(50))
+
+        let one = QuotaParsing.combinedAllowance(
+            [QuotaParsing.AllowanceSample(usedPercent: 60, start: start, end: end)],
+            now: halfway
+        )
+        #expect(one?.usedPercent == 60)
+        #expect(one?.pace == QuotaParsing.pace(usedPercent: 60, start: start, end: end, now: halfway))
+        #expect(one?.pace == .over(10))
+
+        #expect(QuotaParsing.combinedAllowance([], now: halfway) == nil)
+
+        let undated = QuotaParsing.combinedAllowance(
+            [
+                QuotaParsing.AllowanceSample(usedPercent: 60, start: start, end: end),
+                QuotaParsing.AllowanceSample(usedPercent: 80, start: nil, end: nil),
+            ],
+            now: halfway
+        )
+        #expect(undated?.usedPercent == 80)
+        #expect(undated?.pace == nil)
+
+        let stored = QuotaParsing.percentBar(
+            kind: .cursorModels,
+            usedPercent: 10,
+            subtitle: "",
+            detail: "",
+            start: start,
+            reset: end,
+            now: halfway
+        )
+        #expect(stored.periodStart == start)
+        let inferredOnly = QuotaParsing.percentBar(
+            kind: .cursorModels,
+            usedPercent: 10,
+            subtitle: "",
+            detail: "",
+            reset: end,
+            now: halfway
+        )
+        #expect(inferredOnly.periodStart == nil)
+        #expect(inferredOnly.pace != nil)
+    }
+
+    /// A real split's marks add up to the total's width on the 0–100% track.
+    /// Past 100% the mark fills the track and the printed percent stays raw.
+    @Test
+    func sharedPoolSegmentsMatchTheTotalWidth() {
+        let usable = 250.0
+        let widths = QuotaParsing.sharedPoolSegmentWidths(
+            totalPercent: 21,
+            shares: [10, 6, 5],
+            usable: usable
+        )
+        #expect(widths.count == 3)
+        #expect(abs(widths[0] - usable * 0.10) < 0.001)
+        #expect(abs(widths[1] - usable * 0.06) < 0.001)
+        #expect(abs(widths[2] - usable * 0.05) < 0.001)
+        #expect(abs(widths.reduce(0, +) - usable * 0.21) < 0.001)
+
+        let one = QuotaParsing.sharedPoolSegmentWidths(totalPercent: 21.1, shares: nil, usable: usable)
+        #expect(one.count == 1)
+        #expect(abs(one[0] - usable * 21.1 / 100) < 0.001)
+
+        let over = QuotaParsing.sharedPoolSegmentWidths(totalPercent: 140, shares: nil, usable: usable)
+        #expect(over.count == 1)
+        #expect(abs(over[0] - usable) < 0.001)
+
+        let overSplit = QuotaParsing.sharedPoolSegmentWidths(totalPercent: 140, shares: [80, 60], usable: usable)
+        #expect(overSplit.count == 2)
+        #expect(abs(overSplit.reduce(0, +) - usable) < 0.001)
+
+        let missing = QuotaParsing.sharedPoolTrackFractions(totalPercent: nil, shares: [10, 11])
+        #expect(missing.isEmpty)
+    }
+
+    /// The live meters repeat one weekly total. They are not Grok Bot, Cursor,
+    /// and Other shares, and grok product rows are not relabeled into those apps.
+    @Test @MainActor
+    func sharedWeeklyPoolDoesNotInventAnAppSplit() async throws {
+        let period = """
+        {
+          "billingCycleStart": 1792060056178,
+          "billingCycleEnd": 1792664856178,
+          "planUsage": {
+            "autoPercentUsed": 21.1,
+            "apiPercentUsed": 0,
+            "totalPercentUsed": 21.1
+          },
+          "displayMessage": "You've used 21% of your included usage",
+          "autoModelSelectedDisplayMessage": "You've used 21% of your included total usage",
+          "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage"
+        }
+        """.data(using: .utf8)!
+        let sand = """
+        {
+          "usagePercent": 21.1,
+          "currentPeriodStart": "2026-10-27T19:49:24Z",
+          "nextResetTimestampUtc": "2026-11-03T20:49:24Z",
+          "isUnified": true,
+          "billingBrand": "SAND_BILLING_BRAND_GROK"
+        }
+        """.data(using: .utf8)!
+        let billing = """
+        {
+          "creditUsagePercent": 21.1,
+          "productUsage": [
+            {"product": "PRODUCT_GROK_BUILD", "usagePercent": 12.0},
+            {"product": "Chat", "usagePercent": 9.1}
+          ],
+          "currentPeriod": {
+            "start": "2026-10-27T19:49:24Z",
+            "end": "2026-11-03T20:49:24Z"
+          }
+        }
+        """.data(using: .utf8)!
+
+        let now = try #require(QuotaParsing.parseISODate("2026-10-30T10:58:00Z"))
+        let reset = try #require(QuotaParsing.parseISODate("2026-11-03T20:49:24Z"))
+        #expect(
+            QuotaParsing.subscriptionResetLine(reset: reset, now: now)
+                == "Resets Nov 3, 2:49 PM CT · 4d 9h 51m left"
+        )
+
+        let cursor = try #require(QuotaParsing.cursorBars(from: period, now: now))
+        let bot = try #require(QuotaParsing.grokBotBar(from: sand, now: now))
+        let grok = try #require(QuotaParsing.superGrokBar(from: billing, now: now))
+        #expect(abs(cursor[0].usedPercent - 21.1) < 0.000_001)
+        #expect(cursor[1].usedPercent == 0)
+        #expect(abs(bot.usedPercent - 21.1) < 0.000_001)
+        #expect(abs(grok.usedPercent - 21.1) < 0.000_001)
+        let config = try #require(QuotaParsing.billingConfig(from: billing))
+        let productSum = try #require(QuotaParsing.productUsagePercent(config))
+        #expect(abs(productSum - 21.1) < 0.001)
+
+        #expect(QuotaParsing.explicitPoolShares(periodJSON: period, sandJSON: sand, billingJSON: billing) == nil)
+        #expect(QuotaParsing.subscriptionKind(forProductName: "PRODUCT_GROK_BUILD") == nil)
+        #expect(QuotaParsing.subscriptionKind(forProductName: "Chat") == nil)
+
+        let samples = [
+            QuotaParsing.AllowanceSample(usedPercent: grok.usedPercent, start: grok.periodStart, end: grok.periodEnd),
+            QuotaParsing.AllowanceSample(usedPercent: bot.usedPercent, start: bot.periodStart, end: bot.periodEnd),
+            QuotaParsing.AllowanceSample(
+                usedPercent: cursor[0].usedPercent,
+                start: cursor[0].periodStart,
+                end: cursor[0].periodEnd
+            ),
+            QuotaParsing.AllowanceSample(
+                usedPercent: cursor[1].usedPercent,
+                start: cursor[1].periodStart,
+                end: cursor[1].periodEnd
+            ),
+        ]
+        let combined = try #require(QuotaParsing.combinedAllowance(samples, now: now))
+        #expect(abs(combined.usedPercent - 21.1) < 0.000_001)
+        for sample in samples {
+            #expect(combined.usedPercent + 0.000_001 >= sample.usedPercent)
+        }
+
+        let usable = 200.0
+        let widths = QuotaParsing.sharedPoolSegmentWidths(
+            totalPercent: combined.usedPercent,
+            shares: nil,
+            usable: usable
+        )
+        #expect(widths.count == 1)
+        #expect(abs(widths[0] - usable * 21.1 / 100) < 0.001)
+
+        let repeatedMeters = QuotaParsing.sharedPoolSegmentWidths(
+            totalPercent: 21.1,
+            shares: [21.1, 21.1, 0],
+            usable: usable
+        )
+        #expect(repeatedMeters.count == 1)
+        #expect(abs(repeatedMeters[0] - usable * 21.1 / 100) < 0.001)
+        #expect(!QuotaParsing.isAdditiveSplit([21.1, 21.1, 0], totalPercent: 21.1))
+
+        let sources = QuotaRefreshSources(
+            periodUsage: { .success(period) },
+            sandUsage: { .payload(sand) },
+            grokBilling: { .usage(billing) },
+            hasGrokSession: { true }
+        )
+        let (monitor, suite) = makeMonitor(sources: sources)
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        await monitor.refresh()
+        #expect(monitor.poolShares.isEmpty)
+        #expect(monitor.bars.contains { $0.kind == .superGrok && $0.isReady })
+        let ready = monitor.bars.filter(\.isReady).map(\.usedPercent)
+        let highest = try #require(ready.max())
+        #expect(abs(highest - 21.1) < 0.000_001)
+        #expect(ready.allSatisfy { highest + 0.000_001 >= $0 })
+
+        let named = """
+        {
+          "creditUsagePercent": 21,
+          "productUsage": [
+            {"product": "Grok Bot", "usagePercent": 10},
+            {"product": "Cursor", "usagePercent": 6},
+            {"product": "Other", "usagePercent": 5}
+          ]
+        }
+        """.data(using: .utf8)!
+        let shares = try #require(
+            QuotaParsing.explicitPoolShares(periodJSON: period, sandJSON: sand, billingJSON: named)
+        )
+        #expect(shares.map(\.kind) == [.cursorModels, .otherModels, .grokBot])
+        #expect(shares.map(\.percent) == [6.0, 5.0, 10.0])
+        let namedWidths = QuotaParsing.sharedPoolSegmentWidths(
+            totalPercent: 21,
+            shares: [10, 6, 5],
+            usable: usable
+        )
+        #expect(abs(namedWidths.reduce(0, +) - usable * 0.21) < 0.001)
+
+        let partial = """
+        {
+          "productUsage": [
+            {"product": "Grok Bot", "usagePercent": 10},
+            {"product": "Chat", "usagePercent": 11}
+          ]
+        }
+        """.data(using: .utf8)!
+        #expect(QuotaParsing.explicitPoolShares(periodJSON: nil, sandJSON: nil, billingJSON: partial) == nil)
+
+        let namedSources = QuotaRefreshSources(
+            periodUsage: { .success(period) },
+            sandUsage: { .payload(sand) },
+            grokBilling: { .usage(named) },
+            hasGrokSession: { true }
+        )
+        let (namedMonitor, namedSuite) = makeMonitor(sources: namedSources)
+        defer { UserDefaults(suiteName: namedSuite)?.removePersistentDomain(forName: namedSuite) }
+        await namedMonitor.refresh()
+        #expect(namedMonitor.poolShares == shares)
+    }
+
+    /// The 4-point floor still belongs to `visibleSegmentWidths`. The subscription
+    /// track uses `exactSegmentWidths`, so a 21% total stays 21% of the track.
+    @Test
+    func nonZeroSegmentsStayVisibleWithoutChangingPrintedPercents() {
+        let fractions = [2.0 / 100.0 / 3.0, 2.0 / 100.0 / 3.0, 0.0]
+        #expect(fractions[2] == 0)
+        let usable = 220.0
+        let widths = QuotaParsing.visibleSegmentWidths(fractions: fractions, usable: usable)
+        #expect(widths.count == 3)
+        #expect(widths[0] >= QuotaParsing.visibleSegmentMinimum)
+        #expect(widths[1] >= QuotaParsing.visibleSegmentMinimum)
+        #expect(widths[2] == 0)
+        #expect(widths.reduce(0, +) <= usable + 0.001)
+
+        let crowded = QuotaParsing.visibleSegmentWidths(
+            fractions: [0.99, 0.005],
+            usable: 100
+        )
+        #expect(abs(crowded[0] - 96) < 0.001)
+        #expect(abs(crowded[1] - 4) < 0.001)
+        #expect(abs(crowded.reduce(0, +) - 100) < 0.001)
+
+        let full = QuotaParsing.visibleSegmentWidths(
+            fractions: [1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0],
+            usable: usable
+        )
+        #expect(abs(full.reduce(0, +) - usable) < 0.001)
+        #expect(full.allSatisfy { $0 >= QuotaParsing.visibleSegmentMinimum })
+
+        let printed = QuotaParsing.percentBar(
+            kind: .grokBot,
+            usedPercent: 2,
+            subtitle: "",
+            detail: ""
+        )
+        #expect(printed.usedText == "2% used")
+        #expect(QuotaParsing.visibleSegmentMinimum == 4)
+    }
+
+    /// The live Cursor and Grok Bot windows end 2026-11-03 20:49:24Z, which is
+    /// 2:49 PM CT after daylight saving ends. Pools that print as that same
+    /// minute share one reset line. A day or more counts leftover minutes.
+    @Test
+    func subscriptionResetLineUsesTheChicagoMinute() {
+        let reset = QuotaParsing.parseISODate("2026-11-03T20:49:24Z")!
+        let now = QuotaParsing.parseISODate("2026-10-27T21:40:00Z")!
+        #expect(
+            QuotaParsing.subscriptionResetLine(reset: reset, now: now)
+                == "Resets Nov 3, 2:49 PM CT · 6d 23h 9m left"
+        )
+        #expect(QuotaParsing.subscriptionRemainingPhrase(until: reset, now: now) == "6d 23h 9m")
+        #expect(QuotaParsing.remainingPhrase(until: reset, now: now) == "6d 23h")
+        let after = reset.addingTimeInterval(5)
+        #expect(QuotaParsing.subscriptionResetLine(reset: reset, now: after) == "Resets Nov 3, 2:49 PM CT")
+
+        let sameMinute = reset.addingTimeInterval(20)
+        #expect(QuotaParsing.subscriptionResetsShareOneLine([reset, sameMinute, reset]))
+        let nextMinute = reset.addingTimeInterval(60)
+        #expect(!QuotaParsing.subscriptionResetsShareOneLine([reset, nextMinute]))
+        #expect(!QuotaParsing.subscriptionResetsShareOneLine([]))
+    }
+
+    /// Pace math is unchanged. The label is green under, yellow on pace or
+    /// over by 1–4 points, and red at 5 or more points over.
+    @Test
+    func subscriptionPaceColorBand() {
+        #expect(QuotaPace.under(12).colorBand == .green)
+        #expect(QuotaPace.onPace.colorBand == .yellow)
+        #expect(QuotaPace.over(1).colorBand == .yellow)
+        #expect(QuotaPace.over(4).colorBand == .yellow)
+        #expect(QuotaPace.over(5).colorBand == .red)
+        #expect(QuotaPace.over(20).colorBand == .red)
+        #expect(PaceColorBand.slightOverPoints == 5)
+    }
+
+    /// 50 and 80 apply to the rounded percent the label shows.
+    /// Legend percents keep their own color below 50.
+    @Test
+    func usageTextLevelFollowsTheRoundedPercent() {
+        #expect(UsageTextLevel.level(displayedPercent: 0) == .unchanged)
+        #expect(UsageTextLevel.level(displayedPercent: 49) == .unchanged)
+        #expect(UsageTextLevel.level(displayedPercent: 50) == .yellow)
+        #expect(UsageTextLevel.level(displayedPercent: 79) == .yellow)
+        #expect(UsageTextLevel.level(displayedPercent: 80) == .red)
+        #expect(UsageTextLevel.level(displayedPercent: 100) == .red)
+    }
+
+    /// The single bar and the total "% used" label share this color.
+    /// Green below 50, yellow at 50, red at 80, from the rounded percent shown.
+    @Test
+    func usageFillLevelFollowsTheDisplayedTotal() {
+        #expect(UsageFillLevel.level(displayedPercent: Int(49.4.rounded())) == .green)
+        #expect(UsageFillLevel.level(displayedPercent: 0) == .green)
+        #expect(UsageFillLevel.level(displayedPercent: 49) == .green)
+        #expect(UsageFillLevel.level(displayedPercent: Int(49.5.rounded())) == .yellow)
+        #expect(UsageFillLevel.level(displayedPercent: 50) == .yellow)
+        #expect(UsageFillLevel.level(displayedPercent: 79) == .yellow)
+        #expect(UsageFillLevel.level(displayedPercent: Int(79.4.rounded())) == .yellow)
+        #expect(UsageFillLevel.level(displayedPercent: Int(79.5.rounded())) == .red)
+        #expect(UsageFillLevel.level(displayedPercent: 80) == .red)
+        #expect(UsageFillLevel.level(displayedPercent: 100) == .red)
+        #expect(UsageFillLevel.level(displayedPercent: 130) == .red)
+    }
+
+    /// The phone's combined reset line needs the real period, including on a
+    /// snapshot that was published before those fields existed.
+    @Test
+    func snapshotQuotaBarCarriesThePeriodAndStillDecodesOlderPayloads() throws {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let end = start.addingTimeInterval(7 * 24 * 60 * 60)
+        let bar = QuotaParsing.percentBar(
+            kind: .grokBot,
+            usedPercent: 12.4,
+            subtitle: "Weekly usage",
+            detail: "Resets Nov 3",
+            start: start,
+            reset: end
+        )
+        let snap = SnapshotQuotaBar(bar)
+        #expect(snap.periodStart == start)
+        #expect(snap.periodEnd == end)
+        #expect(snap.rawUsedPercent == 12.4)
+        #expect(snap.allowanceUsedPercent == 12.4)
+
+        let snapshot = QuotaSnapshot(
+            version: 1,
+            lastUpdated: start,
+            bars: [snap]
+        )
+        let encoded = try QuotaSnapshotCodec.encode(snapshot)
+        let roundTrip = try QuotaSnapshotCodec.decode(encoded)
+        #expect(roundTrip.bars.first?.periodStart == start)
+        #expect(roundTrip.bars.first?.periodEnd == end)
+        #expect(roundTrip.bars.first?.rawUsedPercent == 12.4)
+        #expect(roundTrip.poolShares.isEmpty)
+
+        let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var bars = try #require(object["bars"] as? [[String: Any]])
+        bars[0].removeValue(forKey: "periodStart")
+        bars[0].removeValue(forKey: "periodEnd")
+        bars[0].removeValue(forKey: "rawUsedPercent")
+        var stripped = object
+        stripped["bars"] = bars
+        stripped.removeValue(forKey: "poolShares")
+        let legacy = try JSONSerialization.data(withJSONObject: stripped)
+        let decoded = try QuotaSnapshotCodec.decode(legacy)
+        let older = try #require(decoded.bars.first)
+        #expect(older.periodStart == nil)
+        #expect(older.periodEnd == nil)
+        #expect(older.rawUsedPercent == nil)
+        #expect(older.allowanceUsedPercent == 12)
+        #expect(decoded.poolShares.isEmpty)
+    }
+
+    @Test
+    func snapshotCarriesNamedPoolSharesAndOmitsThemWhenEmpty() throws {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let shares = [
+            QuotaParsing.PoolShare(kind: .grokBot, percent: 10),
+            QuotaParsing.PoolShare(kind: .cursorModels, percent: 6),
+            QuotaParsing.PoolShare(kind: .otherModels, percent: 5),
+        ]
+        let snapshot = QuotaSnapshot(
+            version: 1,
+            lastUpdated: start,
+            bars: [],
+            poolShares: shares
+        )
+        let encoded = try QuotaSnapshotCodec.encode(snapshot)
+        let roundTrip = try QuotaSnapshotCodec.decode(encoded)
+        #expect(roundTrip.poolShares == shares)
+
+        let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var stripped = object
+        stripped.removeValue(forKey: "poolShares")
+        let legacy = try JSONSerialization.data(withJSONObject: stripped)
+        let older = try QuotaSnapshotCodec.decode(legacy)
+        #expect(older.poolShares.isEmpty)
+
+        let empty = QuotaSnapshot(
+            version: 1,
+            lastUpdated: start,
+            bars: []
+        )
+        let emptyJSON = try #require(
+            JSONSerialization.jsonObject(with: try QuotaSnapshotCodec.encode(empty)) as? [String: Any]
+        )
+        #expect(emptyJSON["poolShares"] == nil)
     }
 }
 

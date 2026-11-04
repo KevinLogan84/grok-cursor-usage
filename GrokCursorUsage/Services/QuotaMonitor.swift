@@ -56,6 +56,9 @@ enum QuotaFetchTimeout {
 @Observable
 final class QuotaMonitor {
     private(set) var bars: [QuotaBar]
+    /// Named shares of the one weekly pool. Empty when no source sent them.
+    /// The card then draws one bar at the total and does not invent a split.
+    private(set) var poolShares: [QuotaParsing.PoolShare] = []
     private(set) var lastUpdated: Date?
     private(set) var isRefreshing = false
     /// Pool the menu bar names: the one whose percent rose most recently.
@@ -325,6 +328,23 @@ final class QuotaMonitor {
         }
 
         bars = QuotaKind.subscriptionCases.compactMap { included[$0] }
+        let periodData: Data? = {
+            guard havePeriod, let period, case .success(let data) = period else { return nil }
+            return data
+        }()
+        let sandData: Data? = {
+            guard haveSand, let sand, case .payload(let data) = sand else { return nil }
+            return data
+        }()
+        let billingData: Data? = {
+            guard haveGrok, let grok, case .usage(let data) = grok else { return nil }
+            return data
+        }()
+        poolShares = QuotaParsing.explicitPoolShares(
+            periodJSON: periodData,
+            sandJSON: sandData,
+            billingJSON: billingData
+        ) ?? []
         lastUpdated = .now
         if havePeriod, haveSand, haveGrok {
             let next = menuBarFocus.advanced(by: bars)

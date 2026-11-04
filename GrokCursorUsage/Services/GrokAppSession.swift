@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// One cookie from a Safari `Cookies.binarycookies` file. Tests may inspect
 /// `name` / `domain`. Do not log `value`.
